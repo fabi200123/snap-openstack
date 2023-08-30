@@ -45,7 +45,7 @@ class HeatPlugin(OpenStackControlPlanePlugin):
     def set_tfvars_on_enable(self) -> dict:
         """Set terraform variables to enable the application."""
         return {
-            "heat-channel": "2023.1/edge",
+            "heat-channel": "2023.1/candidate",
             "enable-heat": True,
         }
 
