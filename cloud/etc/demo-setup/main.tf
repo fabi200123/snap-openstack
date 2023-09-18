@@ -131,6 +131,11 @@ resource "openstack_networking_router_v2" "user_router" {
   tenant_id           = openstack_identity_project_v3.user_project.id
   admin_state_up      = true
   external_network_id = openstack_networking_network_v2.external_network.id
+  # Ensure router is created after external subnet to avoid
+  # https://bugs.launchpad.net/snap-openstack/+bug/2034063
+  depends_on = [
+    openstack_networking_subnet_v2.external_subnet
+  ]
 }
 
 resource "openstack_networking_router_interface_v2" "user_router_interface" {
