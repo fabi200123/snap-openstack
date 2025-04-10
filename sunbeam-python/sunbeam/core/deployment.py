@@ -19,8 +19,10 @@ import logging
 import pathlib
 import shutil
 from typing import TYPE_CHECKING, Type
+from urllib.request import proxy_bypass
 
 import pydantic
+import websockets
 import yaml
 from juju.controller import Controller
 from snaphelpers import Snap
@@ -44,6 +46,7 @@ from sunbeam.core.manifest import (
     Manifest,
     embedded_manifest_path,
 )
+from sunbeam.core.proxy import patch_process_env, should_bypass
 from sunbeam.core.terraform import TerraformHelper
 from sunbeam.versions import MANIFEST_ATTRIBUTES_TFVAR_MAP, TERRAFORM_DIR_NAMES
 
@@ -155,11 +158,51 @@ class Deployment(pydantic.BaseModel):
             raise ValueError(
                 f"No juju controller configured for deployment {self.name}."
             )
-        return self.juju_controller.to_controller(self.juju_account)
+        try:
+            return self.juju_controller.to_controller(self.juju_account)
+        except websockets.exceptions.InvalidProxyStatus:
+            LOG.debug("Failed to connect to juju controller because of proxy.")
+            LOG.debug("Try to add controller to proxy settings.")
+            self._ensure_juju_controller_in_no_proxy(self.juju_controller)
+            return self.juju_controller.to_controller(self.juju_account)
 
     def generate_core_config(self, console) -> str:
         """Generate preseed for deployment."""
         return NotImplemented
+
+    def _ensure_juju_controller_in_no_proxy(self, juju_controller: JujuController):
+        """Ensure juju controller is in no_proxy settings.
+
+        Manual intervention is necessary for Juju Controller only.
+        Underlying websocket library does not support CIDR notation for
+        no_proxy.
+        """
+        proxy = self.get_proxy_settings()
+        if not proxy:
+            return
+        no_proxy = proxy.get("NO_PROXY", "").strip()
+        no_proxy_set: set[str] = set(filter(None, no_proxy.split(",")))
+        for endpoint in juju_controller.api_endpoints:
+            # Defined environment proxy does allow for the controller ip to be bypassed.
+            if not should_bypass(no_proxy_set, endpoint):
+                LOG.debug("Endpoint %s should not bypass proxy, skipping", endpoint)
+                continue
+            # Defined environment proxy allows for the controller ip to be bypassed.
+            if not proxy_bypass(endpoint, proxies={"no": ",".join(no_proxy_set)}):
+                # The stdlib function does not consider it should be bypassed.
+                host = endpoint.rsplit(":", 1)[0]
+                LOG.debug(
+                    "Endpoint %s should bypass proxy, adding to no_proxy", endpoint
+                )
+                no_proxy_set.add(host)
+        proxy["NO_PROXY"] = ",".join(no_proxy_set)
+        self.ensure_proxy_settings(proxy)
+
+    def ensure_proxy_settings(self, settings: dict[str, str] | None = None):
+        """Ensure current env has proxy settings."""
+        if not settings:
+            settings = self.get_proxy_settings()
+        patch_process_env(settings)
 
     def get_default_proxy_settings(self) -> dict:
         """Return default proxy settings."""

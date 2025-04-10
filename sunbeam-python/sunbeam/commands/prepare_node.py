@@ -16,7 +16,7 @@
 import click
 from rich.console import Console
 
-from sunbeam.versions import JUJU_CHANNEL, LXD_CHANNEL, SUPPORTED_RELEASE
+from sunbeam.versions import JUJU_BASE, JUJU_CHANNEL, LXD_CHANNEL, SUPPORTED_RELEASE
 
 console = Console()
 
@@ -45,15 +45,12 @@ sudo grep -r $USER /etc/{{sudoers,sudoers.d}} | grep NOPASSWD:ALL &> /dev/null |
     rm -f /tmp/90-$USER-sudo-access
 }}
 
-# Ensure OpenSSH server is installed
-dpkg -s openssh-server &> /dev/null || {{
-    sudo apt install -y openssh-server
-}}
-
-# Ensure Curl is installed on Ubuntu Desktop
-dpkg -s curl &> /dev/null || {{
-    sudo apt install -y curl
-}}
+# Ensure dependency packages are installed
+for pkg in openssh-server curl sed; do
+    dpkg -s $pkg &> /dev/null || {{
+        sudo apt install -y $pkg
+    }}
+done
 
 # Add $USER to the snap_daemon group supporting interaction
 # with the sunbeam clustering daemon for cluster operations.
@@ -71,6 +68,18 @@ ERROR: No external connectivity. Set HTTP_PROXY, HTTPS_PROXY, NO_PROXY
        in /etc/environment and re-run this command.
 EOF
     exit 1
+fi
+
+# Ensure the localhost IPs are present in the no_proxy list
+# both on disk and in the environment
+if grep -E -q "NO_PROXY=" /etc/environment; then
+    echo "Ensuring all localhost IPs are in the no_proxy list"
+    for ip in $(hostname -I); do
+        export NO_PROXY="$NO_PROXY,$ip"
+        grep -E -q "NO_PROXY=.*$ip.*" /etc/environment \
+            || sudo sed -E -i "s|^NO_PROXY=(.*)|NO_PROXY=\\1,$ip|" \
+                    /etc/environment
+    done
 fi
 """
 
@@ -149,12 +158,50 @@ profiles:
       type: disk
   name: default
 EOF
+    # Add the LXD bridge to the no_proxy list while we don't know the container final IP
+    cidr=$(sudo --user $USER lxc network list --format compact | grep sunbeambr0 | col4)
+    export NO_PROXY="$NO_PROXY,$cidr"
 fi
 # Bootstrap juju onto LXD
 echo 'Bootstrapping Juju onto LXD'
 sudo --user $USER juju show-controller 2>/dev/null
 if [ $? -ne 0 ]; then
-    sudo --user $USER juju bootstrap localhost
+    set -e
+    if printenv | grep -q "^HTTP_PROXY"; then
+        sudo --preserve-env --user $USER juju download juju-controller \\
+            --channel {JUJU_CHANNEL} --base {JUJU_BASE}
+        mv juju-controller_r*.charm juju-controller.charm
+        sudo --preserve-env --user $USER juju bootstrap localhost \\
+            --controller-charm-path=juju-controller.charm \\
+            --config "juju-http-proxy=$HTTP_PROXY" \\
+            --config "juju-https-proxy=$HTTPS_PROXY" \\
+            --config "juju-no-proxy=$NO_PROXY" \\
+            --config "no-proxy=$NO_PROXY" \\
+            --config "snap-http-proxy=$HTTP_PROXY" \\
+            --config "snap-https-proxy=$HTTPS_PROXY" \\
+            --model-default "juju-http-proxy=$HTTP_PROXY" \\
+            --model-default "juju-https-proxy=$HTTPS_PROXY" \\
+            --model-default "juju-no-proxy=$NO_PROXY" \\
+            --model-default "no-proxy=$NO_PROXY" \\
+            --model-default "snap-http-proxy=$HTTP_PROXY" \\
+            --model-default "snap-https-proxy=$HTTPS_PROXY"
+        rm juju-controller.charm
+        controller=$(sudo --user $USER lxc list --format compact | grep juju- | col3)
+        echo "Ensuring Controller ip '$controller' is in the no_proxy list"
+        grep -E -q "NO_PROXY=.*$controller.*" /etc/environment \
+            || sudo sed -E -i "s|^NO_PROXY=(.*)|NO_PROXY=\\1,$controller|" \
+                    /etc/environment
+        sleep 10
+        sudo --preserve-env --user $USER juju refresh --model controller \\
+            controller --switch ch:juju-controller --channel {JUJU_CHANNEL}
+        sudo --preserve-env --user $USER juju switch admin/controller
+        sudo --preserve-env --user $USER juju wait-for application controller
+        sudo --preserve-env --user $USER juju wait-for unit controller/0 \\
+            --query 'life=="alive"'
+    else
+        sudo --user $USER juju bootstrap localhost
+    fi
+    echo "Juju bootstrap complete, you can now bootstrap sunbeam!"
 fi
 """
 
