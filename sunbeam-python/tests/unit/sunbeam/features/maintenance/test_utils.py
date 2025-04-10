@@ -20,6 +20,7 @@ import pytest
 
 from sunbeam.core.common import ResultType
 from sunbeam.features.maintenance.utils import (
+    OperationGoal,
     OperationViewer,
     get_node_status,
 )
@@ -103,16 +104,32 @@ class TestOperationViewer:
         viewer = OperationViewer("fake-node")
         assert viewer._operation_result == ""
 
-    def test_dry_run_message(self):
+    @pytest.mark.parametrize(
+        "goal,expected",
+        [
+            (
+                OperationGoal.EnableMaintenance,
+                (
+                    "Required operations to enable maintenance mode for fake-node:"
+                    f"{linesep}fake-operation-plan"
+                ),
+            ),
+            (
+                OperationGoal.DisableMaintenance,
+                (
+                    "Required operations to disable maintenance mode for fake-node:"
+                    f"{linesep}fake-operation-plan"
+                ),
+            ),
+        ],
+    )
+    def test_dry_run_message(self, goal, expected):
         with patch.object(
             OperationViewer, "_operation_plan", new_callable=PropertyMock
         ) as mock_property:
             mock_property.return_value = "fake-operation-plan"
-            viewer = OperationViewer("fake-node")
-            assert viewer.dry_run_message == (
-                "Required operations to put fake-node into"
-                f" maintenance mode:{linesep}fake-operation-plan"
-            )
+            viewer = OperationViewer("fake-node", goal)
+            assert viewer.dry_run_message == expected
 
     def test_get_watcher_action_key_change_nova_service_state(self):
         mock_action = Mock()
@@ -284,9 +301,26 @@ class TestOperationViewer:
             "step3": "SKIPPED",
         }
 
+    @pytest.mark.parametrize(
+        "goal,expected",
+        [
+            (
+                OperationGoal.EnableMaintenance,
+                (
+                    f"Continue to run operations to enable maintenance mode for fake-node: {linesep}"
+                ),
+            ),
+            (
+                OperationGoal.DisableMaintenance,
+                (
+                    f"Continue to run operations to disable maintenance mode for fake-node: {linesep}"
+                ),
+            ),
+        ],
+    )
     @patch("sunbeam.features.maintenance.utils.ConfirmQuestion")
-    def test_prompt(self, mock_confirm_question):
-        viewer = OperationViewer("fake-node")
+    def test_prompt(self, mock_confirm_question, goal, expected):
+        viewer = OperationViewer("fake-node", goal)
         mock_confirm_question.return_value = Mock()
 
         with patch.object(
@@ -295,8 +329,7 @@ class TestOperationViewer:
             viewer.prompt()
 
             mock_confirm_question.assert_called_once_with(
-                f"Continue to run operations to put fake-node into"
-                f" maintenance mode:{linesep}{mock_property.return_value}"
+                expected + mock_property.return_value
             )
             mock_confirm_question.return_value.ask.assert_called_once()
 

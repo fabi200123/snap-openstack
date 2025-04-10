@@ -27,7 +27,11 @@ from sunbeam.core.common import (
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import JujuHelper
 from sunbeam.features.maintenance import checks
-from sunbeam.features.maintenance.utils import OperationViewer, get_node_status
+from sunbeam.features.maintenance.utils import (
+    OperationGoal,
+    OperationViewer,
+    get_node_status,
+)
 from sunbeam.steps.hypervisor import EnableHypervisorStep
 from sunbeam.steps.maintenance import (
     CreateWatcherHostMaintenanceAuditStep,
@@ -87,7 +91,6 @@ def enable(
     show_hints: bool = False,
 ) -> None:
     """Enable maintenance mode for node."""
-    console.print(f"Enable maintenance for {node}")
     jhelper = JujuHelper(deployment.get_connected_controller())
 
     node_status = get_node_status(
@@ -171,7 +174,7 @@ def enable(
         generate_operation_plan_results, MicroCephActionStep
     )
 
-    ops_viewer = OperationViewer(node)
+    ops_viewer = OperationViewer(node, OperationGoal.EnableMaintenance)
     if "compute" in node_status:
         ops_viewer.add_watch_actions(actions=audit_info["actions"])
     if "storage" in node_status:
@@ -312,7 +315,7 @@ def disable(
         generate_operation_plan_results, MicroCephActionStep
     )
 
-    ops_viewer = OperationViewer(node)
+    ops_viewer = OperationViewer(node, OperationGoal.DisableMaintenance)
     if "compute" in node_status:
         ops_viewer.add_step(step_name=EnableHypervisorStep.__name__)
         if not disable_instance_workload_rebalancing:
