@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import enum
 import logging
 from os import linesep
 from typing import Any
@@ -65,11 +66,19 @@ def get_node_status(
     return {}
 
 
+class OperationGoal(enum.Enum):
+    EnableMaintenance = "EnableMaintenance"
+    DisableMaintenance = "DisableMaintenance"
+
+
 class OperationViewer:
-    def __init__(self, node: str):
+    def __init__(
+        self, node: str, goal: OperationGoal = OperationGoal.EnableMaintenance
+    ):
         self.node = node
         self.operations: list[str] = []
         self.operation_states: dict[str, str] = {}
+        self.goal = goal
 
     @property
     def _operation_plan(self) -> str:
@@ -92,9 +101,15 @@ class OperationViewer:
     @property
     def dry_run_message(self) -> str:
         """Return CLI output message for dry-run."""
+        if self.goal == OperationGoal.DisableMaintenance:
+            return (
+                "Required operations to disable maintenance mode"
+                f" for {self.node}:{linesep}{self._operation_plan}"
+            )
+        # EnableMaintenance
         return (
-            f"Required operations to put {self.node} into "
-            f"maintenance mode:{linesep}{self._operation_plan}"
+            "Required operations to enable maintenance mode"
+            f" for {self.node}:{linesep}{self._operation_plan}"
         )
 
     @staticmethod
@@ -169,10 +184,16 @@ class OperationViewer:
 
     def prompt(self) -> bool:
         """Determines if the operations is confirmed by the user."""
-        question: Question = ConfirmQuestion(
-            f"Continue to run operations to put {self.node} into"
-            f" maintenance mode:{linesep}{self._operation_plan}"
+        # EnableMaintenance
+        prefix = (
+            f"Continue to run operation to enable maintenance mode for {self.node}:"
         )
+        if self.goal == OperationGoal.DisableMaintenance:
+            prefix = (
+                f"Continue to run operation to disable maintenance"
+                f" mode for {self.node}:"
+            )
+        question: Question = ConfirmQuestion(prefix + linesep + self._operation_plan)
         return question.ask() or False
 
     def check_operation_succeeded(self, results: dict[str, Result]):
