@@ -16,8 +16,8 @@
 import json
 import logging
 import traceback
+import typing
 
-import openstack
 from rich.status import Status
 
 from sunbeam.clusterd.client import Client
@@ -45,6 +45,12 @@ from sunbeam.core.steps import (
     DestroyMachineApplicationStep,
 )
 from sunbeam.core.terraform import TerraformException, TerraformHelper
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import openstack
+else:
+    openstack = LazyImport("openstack")
 
 LOG = logging.getLogger(__name__)
 CONFIG_KEY = "TerraformVarsHypervisor"

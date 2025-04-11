@@ -30,9 +30,14 @@ from pathlib import Path
 
 import click
 import netifaces  # type: ignore [import-untyped]
-from pyroute2 import NDB  # type: ignore [import-untyped]
 
 from sunbeam.core.common import SunbeamException
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import pyroute2  # type: ignore [import]
+else:
+    pyroute2 = LazyImport("pyroute2")
 
 LOG = logging.getLogger(__name__)
 LOCAL_ACCESS = "local"
@@ -178,7 +183,7 @@ def get_local_cidr_from_ip_address(
     """
     if isinstance(ip_address, str):
         ip_address = ipaddress.ip_address(ip_address)
-    with NDB() as ndb:
+    with pyroute2.NDB() as ndb:
         for parsed_address in ndb.addresses.values():
             network = ipaddress.ip_network(
                 parsed_address["address"] + "/" + str(parsed_address["prefixlen"]),
@@ -192,7 +197,7 @@ def get_local_cidr_from_ip_address(
 def get_local_ip_by_cidr(cidr: str) -> str:
     """Get first IP address of host associated with CIDR."""
     network = ipaddress.ip_network(cidr, strict=True)
-    with NDB() as ndb:
+    with pyroute2.NDB() as ndb:
         for parsed_address in ndb.addresses.values():
             address = ipaddress.ip_address(parsed_address["address"])
             if address in network:
@@ -203,7 +208,7 @@ def get_local_ip_by_cidr(cidr: str) -> str:
 def get_local_ifname_by_cidr(cidr: str) -> str:
     """Get ifname of the first IP address of host associated with CIDR."""
     network = ipaddress.ip_network(cidr, strict=True)
-    with NDB() as ndb:
+    with pyroute2.NDB() as ndb:
         for parsed_address in ndb.addresses.summary():
             address = ipaddress.ip_address(parsed_address["address"])
             if address in network:

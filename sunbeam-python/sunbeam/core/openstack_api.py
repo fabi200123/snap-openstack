@@ -14,17 +14,22 @@
 # limitations under the License.
 
 import logging
-
-import openstack
+import typing
 
 from sunbeam.commands.configure import retrieve_admin_credentials
 from sunbeam.core.juju import JujuHelper
 from sunbeam.core.openstack import OPENSTACK_MODEL
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import openstack
+else:
+    openstack = LazyImport("openstack")
 
 LOG = logging.getLogger(__name__)
 
 
-def get_admin_connection(jhelper: JujuHelper) -> openstack.connection.Connection:
+def get_admin_connection(jhelper: JujuHelper) -> "openstack.connection.Connection":
     """Return a connection to keystone using admin credentials.
 
     :param jhelper: Juju helpers for retrieving admin credentials
@@ -44,9 +49,9 @@ def get_admin_connection(jhelper: JujuHelper) -> openstack.connection.Connection
 
 def guests_on_hypervisor(
     hypervisor_name: str,
-    conn: openstack.connection.Connection,
+    conn: "openstack.connection.Connection",
     status: str | None = None,
-) -> list[openstack.compute.v2.server.Server]:
+) -> list["openstack.compute.v2.server.Server"]:
     """Return a list of guests that run on the given hypervisor.
 
     :param hypervisor_name: Name of hypervisor
@@ -62,7 +67,7 @@ def guests_on_hypervisor(
 
 
 def remove_compute_service(
-    hypervisor_name: str, conn: openstack.connection.Connection
+    hypervisor_name: str, conn: "openstack.connection.Connection"
 ) -> None:
     """Remove compute services associated with hypervisor from nova.
 
@@ -76,7 +81,7 @@ def remove_compute_service(
 
 
 def remove_network_service(
-    hypervisor_name: str, conn: openstack.connection.Connection
+    hypervisor_name: str, conn: "openstack.connection.Connection"
 ) -> None:
     """Remove network services associated with hypervisor from neutron.
 

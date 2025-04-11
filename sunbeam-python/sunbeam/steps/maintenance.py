@@ -15,12 +15,10 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import tenacity
 from rich.status import Status
-from watcherclient import v1 as watcher
-from watcherclient.v1 import client as watcher_client
 
 from sunbeam.clusterd.client import Client
 from sunbeam.core import watcher as watcher_helper
@@ -34,6 +32,10 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.watcher import WatcherActionFailedException
 from sunbeam.steps.microceph import APPLICATION as _MICROCEPH_APPLICATION
+
+if TYPE_CHECKING:
+    from watcherclient import v1 as watcher
+    from watcherclient.v1 import client as watcher_client
 
 LOG = logging.getLogger(__name__)
 
@@ -93,16 +95,16 @@ class CreateWatcherAuditStepABC(ABC, BaseStep):
     ):
         super().__init__(self.name, self.description)
         self.node = node
-        self.client: watcher_client.Client = watcher_helper.get_watcher_client(
+        self.client: "watcher_client.Client" = watcher_helper.get_watcher_client(
             deployment=deployment
         )
 
     @abstractmethod
-    def _create_audit(self) -> watcher.Audit:
+    def _create_audit(self) -> "watcher.Audit":
         """Create Watcher audit."""
         raise NotImplementedError
 
-    def _get_actions(self, audit: watcher.Audit) -> list[watcher.Action]:
+    def _get_actions(self, audit: "watcher.Audit") -> list["watcher.Action"]:
         return watcher_helper.get_actions(client=self.client, audit=audit)
 
     def run(self, status: Status | None) -> Result:
@@ -126,7 +128,7 @@ class CreateWatcherHostMaintenanceAuditStep(CreateWatcherAuditStepABC):
     name = "Create Watcher Host maintenance audit"
     description = "Create Watcher Host maintenance audit"
 
-    def _create_audit(self) -> watcher.Audit:
+    def _create_audit(self) -> "watcher.Audit":
         audit_template = watcher_helper.get_enable_maintenance_audit_template(
             client=self.client
         )
@@ -141,7 +143,7 @@ class CreateWatcherWorkloadBalancingAuditStep(CreateWatcherAuditStepABC):
     name = "Create Watcher workload balancing audit"
     description = "Create Watcher workload balancing audit"
 
-    def _create_audit(self) -> watcher.Audit:
+    def _create_audit(self) -> "watcher.Audit":
         audit_template = watcher_helper.get_workload_balancing_audit_template(
             client=self.client
         )
@@ -159,11 +161,11 @@ class RunWatcherAuditStep(BaseStep):
         self,
         deployment: Deployment,
         node: str,
-        audit: watcher.Audit,
+        audit: "watcher.Audit",
     ):
         self.node = node
         super().__init__(self.name, self.description)
-        self.client: watcher_client.Client = watcher_helper.get_watcher_client(
+        self.client: "watcher_client.Client" = watcher_helper.get_watcher_client(
             deployment=deployment
         )
         self.audit = audit

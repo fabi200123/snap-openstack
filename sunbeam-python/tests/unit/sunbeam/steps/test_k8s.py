@@ -294,12 +294,12 @@ class TestEnsureL2AdvertisementByHostStep(unittest.TestCase):
         self.step.kubeconfig = Mock()
 
         self.kubeconfig_mocker = patch(
-            "sunbeam.steps.k8s.KubeConfig",
+            "sunbeam.steps.k8s.l_kubeconfig.KubeConfig",
             Mock(from_dict=Mock(return_value=self.step.kubeconfig)),
         )
         self.kubeconfig_mocker.start()
         self.kube_mocker = patch(
-            "sunbeam.steps.k8s.KubeClient",
+            "sunbeam.steps.k8s.l_client.Client",
             Mock(return_value=Mock(return_value=self.step.kube)),
         )
         self.kube_mocker.start()

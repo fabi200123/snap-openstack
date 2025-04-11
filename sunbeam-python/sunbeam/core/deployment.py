@@ -24,7 +24,6 @@ from urllib.request import proxy_bypass
 import pydantic
 import websockets
 import yaml
-from juju.controller import Controller
 from snaphelpers import Snap
 
 import sunbeam.utils as sunbeam_utils
@@ -51,6 +50,8 @@ from sunbeam.core.terraform import TerraformHelper
 from sunbeam.versions import MANIFEST_ATTRIBUTES_TFVAR_MAP, TERRAFORM_DIR_NAMES
 
 if TYPE_CHECKING:
+    from juju.controller import Controller
+
     from sunbeam.feature_manager import FeatureManager
     from sunbeam.features.interface.v1.base import BaseFeature
 else:
@@ -150,7 +151,7 @@ class Deployment(pydantic.BaseModel):
         """Return the address of the clusterd server."""
         raise NotImplementedError
 
-    def get_connected_controller(self) -> Controller:
+    def get_connected_controller(self) -> "Controller":
         """Return connected controller."""
         if self.juju_account is None:
             raise ValueError(f"No juju account configured for deployment {self.name}.")

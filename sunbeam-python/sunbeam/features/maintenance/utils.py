@@ -16,11 +16,10 @@
 import enum
 import logging
 from os import linesep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 from rich.console import Console
-from watcherclient import v1 as watcher
 
 from sunbeam.core.common import (
     Result,
@@ -39,6 +38,10 @@ from sunbeam.steps.maintenance import (
     MicroCephActionStep,
     RunWatcherAuditStep,
 )
+
+if TYPE_CHECKING:
+    from watcherclient import v1 as watcher
+
 
 console = Console()
 LOG = logging.getLogger(__name__)
@@ -113,7 +116,7 @@ class OperationViewer:
         )
 
     @staticmethod
-    def _get_watcher_action_key(action: watcher.Action) -> str:
+    def _get_watcher_action_key(action: "watcher.Action") -> str:
         """Return rich information key base on different type of action."""
         key: str
         if action.action_type == "change_nova_service_state":
@@ -129,7 +132,7 @@ class OperationViewer:
             )
         return key
 
-    def add_watch_actions(self, actions: list[watcher.Action]):
+    def add_watch_actions(self, actions: list["watcher.Action"]):
         """Append Watcher actions to operations."""
         for action in actions:
             key = self._get_watcher_action_key(action)
@@ -153,7 +156,7 @@ class OperationViewer:
         self.operations.append(step_name)
         self.operation_states[step_name] = "SKIPPED"
 
-    def update_watcher_actions_result(self, actions: list[watcher.Action]):
+    def update_watcher_actions_result(self, actions: list["watcher.Action"]):
         """Update result of Watcher actions."""
         for action in actions:
             key = self._get_watcher_action_key(action)

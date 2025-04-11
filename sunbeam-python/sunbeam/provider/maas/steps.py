@@ -21,10 +21,10 @@ import ipaddress
 import logging
 import ssl
 import textwrap
+import typing
 from pathlib import Path
 from typing import Sequence
 
-from maas.client import bones  # type: ignore [import-untyped]
 from rich.console import Console
 from rich.status import Status
 from snaphelpers import Snap
@@ -66,6 +66,7 @@ from sunbeam.core.juju import (
 from sunbeam.core.manifest import Manifest
 from sunbeam.core.steps import CreateLoadBalancerIPPoolsStep
 from sunbeam.core.terraform import TerraformHelper
+from sunbeam.lazy import LazyImport
 from sunbeam.steps import clusterd
 from sunbeam.steps.cluster_status import ClusterStatusStep
 from sunbeam.steps.clusterd import APPLICATION as CLUSTERD_APPLICATION
@@ -77,6 +78,11 @@ from sunbeam.steps.juju import (
     ScaleJujuStep,
 )
 from sunbeam.versions import JUJU_BASE
+
+if typing.TYPE_CHECKING:
+    from maas.client import bones  # type: ignore [import-untyped]
+else:
+    bones = LazyImport("maas.client.bones")
 
 LOG = logging.getLogger(__name__)
 console = Console()

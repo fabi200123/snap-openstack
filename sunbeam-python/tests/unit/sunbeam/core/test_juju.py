@@ -565,7 +565,7 @@ async def test_jhelper_wait_until_active_timed_out(
 @pytest.mark.asyncio
 async def test_get_available_charm_revision(jhelper: juju.JujuHelper, model):
     cmd_out = {"channel-map": {"legacy/edge": {"revision": {"version": "121"}}}}
-    with patch.object(juju, "CharmHub") as p:
+    with patch.object(juju.juju_charmhub, "CharmHub") as p:
         charmhub = AsyncMock()
         charmhub.info.return_value = cmd_out
         p.return_value = charmhub
