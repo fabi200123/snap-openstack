@@ -70,6 +70,11 @@ EOF
     exit 1
 fi
 
+if grep -E -q 'HTTPS?_PROXY=' /etc/environment; then
+    echo "Loading in current shell environment variables from /etc/environment"
+    source /etc/environment
+fi
+
 # Ensure the localhost IPs are present in the no_proxy list
 # both on disk and in the environment
 if grep -E -q "NO_PROXY=" /etc/environment; then
