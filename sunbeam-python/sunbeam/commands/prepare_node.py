@@ -80,7 +80,12 @@ fi
 if grep -E -q "NO_PROXY=" /etc/environment; then
     echo "Ensuring all localhost IPs are in the no_proxy list"
     for ip in $(hostname -I); do
-        export NO_PROXY="$NO_PROXY,$ip"
+        if [ -z "$NO_PROXY" ]; then
+            echo "NO_PROXY is not set in current shell"
+            export NO_PROXY="$ip"
+        else
+            export NO_PROXY="$NO_PROXY,$ip"
+        fi
         grep -E -q "NO_PROXY=.*$ip.*" /etc/environment \
             || sudo sed -E -i "s|^NO_PROXY=(.*)|NO_PROXY=\\1,$ip|" \
                     /etc/environment
