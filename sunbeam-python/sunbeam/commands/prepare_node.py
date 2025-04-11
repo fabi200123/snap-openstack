@@ -172,10 +172,12 @@ profiles:
 EOF
 fi
 
-# Add the LXD bridges to the no_proxy list while we don't know the container final IP
-cidr=$(sudo --user $USER lxc network list --format compact | grep YES | col4 | \
-    tr '\\n' ',')
-export NO_PROXY="$(echo $NO_PROXY,$cidr | sed -e 's|^,||' -e 's|,$||')"
+# Add the LXD bridges to the no_proxy list while we don't know the container IP
+if grep -E -q 'HTTPS?_PROXY=' /etc/environment; then
+    cidr=$(sudo --user $USER lxc network list --format compact | grep YES | col4 | \
+        tr '\\n' ',')
+    export NO_PROXY="$(echo $NO_PROXY,$cidr | sed -e 's|^,||' -e 's|,$||')"
+fi
 
 # Bootstrap juju onto LXD
 echo 'Bootstrapping Juju onto LXD'
