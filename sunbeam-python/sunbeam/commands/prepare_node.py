@@ -77,7 +77,7 @@ fi
 
 # Ensure the localhost IPs are present in the no_proxy list
 # both on disk and in the environment
-if grep -E -q "NO_PROXY=" /etc/environment; then
+if grep -E -q 'NO_PROXY=' /etc/environment; then
     echo "Ensuring all localhost IPs are in the no_proxy list"
     for ip in $(hostname -I); do
         if [ -z "$NO_PROXY" ]; then
@@ -87,7 +87,9 @@ if grep -E -q "NO_PROXY=" /etc/environment; then
             export NO_PROXY="$NO_PROXY,$ip"
         fi
         grep -E -q "NO_PROXY=.*$ip.*" /etc/environment \
-            || sudo sed -E -i "s|^NO_PROXY=(.*)|NO_PROXY=\\1,$ip|" \
+            || sudo sed -E -i \
+                -e "s|^NO_PROXY=\\"+(.*)\\"+|NO_PROXY=\\"\\1,$ip\\"|" \
+                -e "s|^NO_PROXY=\\",|NO_PROXY=\\"|" \
                     /etc/environment
     done
 fi
@@ -202,8 +204,9 @@ if [ $? -ne 0 ]; then
         controller=$(sudo --user $USER lxc list --format compact | grep juju- | col3)
         echo "Ensuring Controller ip '$controller' is in the no_proxy list"
         grep -E -q "NO_PROXY=.*$controller.*" /etc/environment \
-            || sudo sed -E -i "s|^NO_PROXY=(.*)|NO_PROXY=\\1,$controller|" \
-                    /etc/environment
+            || sudo sed -E \
+                -i "s|^NO_PROXY=\\"+(.*)\\"+|NO_PROXY=\\"\\1,$controller\\"|" \
+                /etc/environment
         sleep 10
         sudo --preserve-env --user $USER juju refresh --model controller \\
             controller --switch ch:juju-controller --channel {JUJU_CHANNEL}
