@@ -168,10 +168,13 @@ profiles:
       type: disk
   name: default
 EOF
-    # Add the LXD bridge to the no_proxy list while we don't know the container final IP
-    cidr=$(sudo --user $USER lxc network list --format compact | grep sunbeambr0 | col4)
-    export NO_PROXY="$NO_PROXY,$cidr"
 fi
+
+# Add the LXD bridges to the no_proxy list while we don't know the container final IP
+cidr=$(sudo --user $USER lxc network list --format compact | grep YES | col4 | \
+    tr '\\n' ',')
+export NO_PROXY="$(echo $NO_PROXY,$cidr | sed -e 's|^,||' -e 's|,$||')"
+
 # Bootstrap juju onto LXD
 echo 'Bootstrapping Juju onto LXD'
 sudo --user $USER juju show-controller 2>/dev/null
