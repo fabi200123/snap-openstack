@@ -1,6 +1,5 @@
-# Copyright (c) 2024 Canonical Ltd.
-# See LICENSE file for licensing details.
-# Testing tools configuration
+# SPDX-FileCopyrightText: 2024 - Canonical Ltd
+# SPDX-License-Identifier: Apache-2.0
 [tool.coverage.run]
 branch = true
 
@@ -92,7 +91,8 @@ max-doc-length = 88
 convention = "google"
 
 [tool.ruff.lint.flake8-copyright]
-author = "Canonical Ltd."
+author = "Canonical Ltd"
+notice-rgx = "(?i)SPDX-FileCopyrightText:\\s+\\d{4}\\s+-\\s+"
 # don't enforce on empty files
 min-file-size = 1
 
