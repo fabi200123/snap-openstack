@@ -151,6 +151,7 @@ from sunbeam.steps.k8s import (
     CordonK8SUnitStep,
     DestroyK8SApplicationStep,
     DrainK8SUnitStep,
+    EnsureDefaultL2AdvertisementMutedStep,
     EnsureL2AdvertisementByHostStep,
     MigrateK8SKubeconfigStep,
     RemoveK8SUnitsStep,
@@ -660,6 +661,7 @@ def deploy(
             deployment, client, jhelper, deployment.openstack_machines_model
         )
     )
+    plan2.append(EnsureDefaultL2AdvertisementMutedStep(deployment, client, jhelper))
     plan2.append(MaasCreateLoadBalancerIPPoolsStep(deployment, client, maas_client))
     plan2.append(
         EnsureL2AdvertisementByHostStep(
