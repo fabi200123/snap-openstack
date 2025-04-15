@@ -16,15 +16,8 @@
 import abc
 import asyncio
 import logging
+import typing
 
-from juju import application, model
-from juju import errors as juju_errors
-from lightkube.config.kubeconfig import KubeConfig
-from lightkube.core import exceptions
-from lightkube.core.client import Client as KubeClient
-from lightkube.core.exceptions import ApiError
-from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import Service
 from rich.status import Status
 
 from sunbeam.clusterd.client import Client
@@ -51,6 +44,24 @@ from sunbeam.core.juju import (
 from sunbeam.core.k8s import K8SHelper
 from sunbeam.core.manifest import Manifest
 from sunbeam.core.terraform import TerraformException, TerraformHelper
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import lightkube.config.kubeconfig as l_kubeconfig
+    import lightkube.core.client as l_client
+    import lightkube.core.exceptions as l_exceptions
+    from juju import application, model
+    from juju import errors as juju_errors
+    from lightkube.models import meta_v1
+    from lightkube.resources import core_v1
+else:
+    l_kubeconfig = LazyImport("lightkube.config.kubeconfig")
+    l_client = LazyImport("lightkube.core.client")
+    l_exceptions = LazyImport("lightkube.core.exceptions")
+    juju_errors = LazyImport("juju.errors")
+    meta_v1 = LazyImport("lightkube.models.meta_v1")
+    core_v1 = LazyImport("lightkube.resources.core_v1")
+
 
 LOG = logging.getLogger(__name__)
 
@@ -446,8 +457,8 @@ class DestroyMachineApplicationStep(BaseStep):
         return 600
 
     async def _list_applications(
-        self, model: model.Model
-    ) -> list[application.Application]:
+        self, model: "model.Model"
+    ) -> list["application.Application"]:
         """List applications managed by this step."""
         apps = []
         for app in self.applications:
@@ -561,14 +572,16 @@ class PatchLoadBalancerServicesIPStep(BaseStep, abc.ABC):
         """
         pass
 
-    def _get_service(self, service_name: str, find_lb: bool = True) -> Service:
+    def _get_service(
+        self, service_name: str, find_lb: bool = True
+    ) -> "core_v1.Service":
         """Look up a service by name, optionally looking for a LoadBalancer service."""
         search_service = service_name
         if find_lb:
             search_service += "-lb"
         try:
-            return self.kube.get(Service, search_service)
-        except ApiError as e:
+            return self.kube.get(core_v1.Service, search_service)
+        except l_exceptions.ApiError as e:
             if e.status.code == 404 and search_service.endswith("-lb"):
                 return self._get_service(service_name, find_lb=False)
             raise e
@@ -585,17 +598,17 @@ class PatchLoadBalancerServicesIPStep(BaseStep, abc.ABC):
             LOG.debug("K8S kubeconfig not found", exc_info=True)
             return Result(ResultType.FAILED, "K8S kubeconfig not found")
 
-        kubeconfig = KubeConfig.from_dict(self.kubeconfig)
+        kubeconfig = l_kubeconfig.KubeConfig.from_dict(self.kubeconfig)
         try:
-            self.kube = KubeClient(kubeconfig, self.model(), trust_env=False)
-        except exceptions.ConfigError as e:
+            self.kube = l_client.Client(kubeconfig, self.model(), trust_env=False)
+        except l_exceptions.ConfigError as e:
             LOG.debug("Error creating k8s client", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
         for service_name in self.services():
             try:
                 service = self._get_service(service_name, find_lb=True)
-            except ApiError as e:
+            except l_exceptions.ApiError as e:
                 return Result(ResultType.FAILED, str(e))
             if not service.metadata:
                 return Result(
@@ -615,7 +628,7 @@ class PatchLoadBalancerServicesIPStep(BaseStep, abc.ABC):
         for service_name in self.services():
             try:
                 service = self._get_service(service_name, find_lb=True)
-            except ApiError as e:
+            except l_exceptions.ApiError as e:
                 return Result(ResultType.FAILED, str(e))
             if not service.metadata:
                 return Result(
@@ -644,7 +657,7 @@ class PatchLoadBalancerServicesIPStep(BaseStep, abc.ABC):
                 service_annotations[self.lb_ip_annotation] = loadbalancer_ip
                 service.metadata.annotations = service_annotations
                 LOG.debug(f"Patching {service_name!r} to use IP {loadbalancer_ip!r}")
-                self.kube.patch(Service, service_name, obj=service)
+                self.kube.patch(core_v1.Service, service_name, obj=service)
 
         return Result(ResultType.COMPLETED)
 
@@ -680,14 +693,16 @@ class PatchLoadBalancerServicesIPPoolStep(BaseStep, abc.ABC):
         """
         pass
 
-    def _get_service(self, service_name: str, find_lb: bool = True) -> Service:
+    def _get_service(
+        self, service_name: str, find_lb: bool = True
+    ) -> "core_v1.Service":
         """Look up a service by name, optionally looking for a LoadBalancer service."""
         search_service = service_name
         if find_lb:
             search_service += "-lb"
         try:
-            return self.kube.get(Service, search_service)
-        except ApiError as e:
+            return self.kube.get(core_v1.Service, search_service)
+        except l_exceptions.ApiError as e:
             if e.status.code == 404 and search_service.endswith("-lb"):
                 return self._get_service(service_name, find_lb=False)
             raise e
@@ -715,17 +730,17 @@ class PatchLoadBalancerServicesIPPoolStep(BaseStep, abc.ABC):
             LOG.debug("K8S kubeconfig not found", exc_info=True)
             return Result(ResultType.FAILED, "K8S kubeconfig not found")
 
-        kubeconfig = KubeConfig.from_dict(self.kubeconfig)
+        kubeconfig = l_kubeconfig.KubeConfig.from_dict(self.kubeconfig)
         try:
-            self.kube = KubeClient(kubeconfig, self.model(), trust_env=False)
-        except exceptions.ConfigError as e:
+            self.kube = l_client.Client(kubeconfig, self.model(), trust_env=False)
+        except l_exceptions.ConfigError as e:
             LOG.debug("Error creating k8s client", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
         for service_name in self.services():
             try:
                 service = self._get_service(service_name, find_lb=True)
-            except ApiError as e:
+            except l_exceptions.ApiError as e:
                 return Result(ResultType.FAILED, str(e))
             if not service.metadata:
                 return Result(
@@ -771,7 +786,7 @@ class PatchLoadBalancerServicesIPPoolStep(BaseStep, abc.ABC):
                     f"Patching {service_name!r} to use annotation "
                     f"{self.lb_pool_annotation!r} with value {self.pool_name!r}"
                 )
-                self.kube.patch(Service, service_name, obj=service)
+                self.kube.patch(core_v1.Service, service_name, obj=service)
 
         return Result(ResultType.COMPLETED)
 
@@ -808,7 +823,7 @@ class CreateLoadBalancerIPPoolsStep(BaseStep, abc.ABC):
         pool = None
         try:
             pool = self.kube.get(self.lbpool_resource, name=name, namespace=self.model)
-        except ApiError as e:
+        except l_exceptions.ApiError as e:
             if e.status.code != 404:
                 raise e
 
@@ -821,7 +836,7 @@ class CreateLoadBalancerIPPoolsStep(BaseStep, abc.ABC):
         else:
             LOG.debug(f"Create new IP Address Pool {name} with addresses {addresses}")
             new_ippool = self.lbpool_resource(
-                metadata=ObjectMeta(name=name),
+                metadata=meta_v1.ObjectMeta(name=name),
                 spec={"addresses": addresses, "autoAssign": False},
             )
             self.kube.create(new_ippool)
@@ -837,7 +852,7 @@ class CreateLoadBalancerIPPoolsStep(BaseStep, abc.ABC):
                 self.l2_advertisement_resource, name=name, namespace=self.model
             )
             self.kube.delete(self.l2_advertisement_resource, name, namespace=self.model)
-        except ApiError as e:
+        except l_exceptions.ApiError as e:
             if e.status.code != 404:
                 raise
 
@@ -849,17 +864,17 @@ class CreateLoadBalancerIPPoolsStep(BaseStep, abc.ABC):
             LOG.debug("K8S kubeconfig not found", exc_info=True)
             return Result(ResultType.FAILED, "K8S kubeconfig not found")
 
-        kubeconfig = KubeConfig.from_dict(self.kubeconfig)
+        kubeconfig = l_kubeconfig.KubeConfig.from_dict(self.kubeconfig)
         try:
-            self.kube = KubeClient(kubeconfig, self.model, trust_env=False)
-        except exceptions.ConfigError as e:
+            self.kube = l_client.Client(kubeconfig, self.model, trust_env=False)
+        except l_exceptions.ConfigError as e:
             LOG.debug("Error creating k8s client", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
         for name, addresses in self.ippools().items():
             try:
                 self.handle_lb_pools(name, addresses)
-            except ApiError as e:
+            except l_exceptions.ApiError as e:
                 return Result(
                     ResultType.FAILED,
                     f"Error in processing LoadBalancer pool {name}: {str(e)}",
@@ -867,7 +882,7 @@ class CreateLoadBalancerIPPoolsStep(BaseStep, abc.ABC):
 
             try:
                 self.handle_l2_advertisement(name)
-            except ApiError as e:
+            except l_exceptions.ApiError as e:
                 return Result(
                     ResultType.FAILED,
                     f"Error in processing L2Advertisement {name}: {str(e)}",

@@ -18,11 +18,20 @@ import base64
 import binascii
 import logging
 import re
+import typing
 
 import click
-from cryptography.exceptions import InvalidSignature
-from cryptography.x509 import load_pem_x509_certificate, load_pem_x509_csr
-from cryptography.x509.oid import NameOID
+
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import cryptography.exceptions as crypto_exceptions
+    import cryptography.x509 as x509
+    import cryptography.x509.oid as x509_oid
+else:
+    crypto_exceptions = LazyImport("cryptography.exceptions")
+    x509 = LazyImport("cryptography.x509")
+    x509_oid = LazyImport("cryptography.x509.oid")
 
 LOG = logging.getLogger()
 
@@ -66,7 +75,7 @@ def get_all_registered_groups(cli: click.Group) -> dict:
 def is_certificate_valid(certificate: bytes) -> bool:
     try:
         certificate_bytes = base64.b64decode(certificate)
-        load_pem_x509_certificate(certificate_bytes)
+        x509.load_pem_x509_certificate(certificate_bytes)
     except (binascii.Error, TypeError, ValueError) as e:
         LOG.debug(e)
         return False
@@ -79,7 +88,7 @@ def validate_ca_certificate(
 ) -> str:
     try:
         ca_bytes = base64.b64decode(value)
-        load_pem_x509_certificate(ca_bytes)
+        x509.load_pem_x509_certificate(ca_bytes)
         return value
     except (binascii.Error, TypeError, ValueError) as e:
         LOG.debug(e)
@@ -109,11 +118,11 @@ def validate_ca_chain(
 
         for cert in chain_list:
             cert_bytes = cert.encode()
-            load_pem_x509_certificate(cert_bytes)
+            x509.load_pem_x509_certificate(cert_bytes)
 
         for ca_cert, cert in zip(chain_list, chain_list[1:]):
-            ca_cert_object = load_pem_x509_certificate(ca_cert.encode("utf-8"))
-            cert_object = load_pem_x509_certificate(cert.encode("utf-8"))
+            ca_cert_object = x509.load_pem_x509_certificate(ca_cert.encode("utf-8"))
+            cert_object = x509.load_pem_x509_certificate(cert.encode("utf-8"))
             try:
                 # function available from cryptography 40.0.0
                 # Antelope upper constraints has cryptography < 40.0.0
@@ -122,15 +131,22 @@ def validate_ca_chain(
                 LOG.debug("CA Chain certs not verified")
 
         return value
-    except (binascii.Error, TypeError, ValueError, InvalidSignature) as e:
+    except (
+        binascii.Error,
+        TypeError,
+        ValueError,
+        crypto_exceptions.InvalidSignature,
+    ) as e:
         LOG.debug(e)
         raise click.BadParameter(str(e))
 
 
 def get_subject_from_csr(csr: str) -> str | None:
     try:
-        req = load_pem_x509_csr(bytes(csr, "utf-8"))
-        uid = req.subject.get_attributes_for_oid(NameOID.X500_UNIQUE_IDENTIFIER)
+        req = x509.load_pem_x509_csr(bytes(csr, "utf-8"))
+        uid = req.subject.get_attributes_for_oid(
+            x509_oid.NameOID.X500_UNIQUE_IDENTIFIER
+        )
         LOG.debug(f"UID for requested csr: {uid}")
         # Pick the first available ID
         return str(uid[0].value)

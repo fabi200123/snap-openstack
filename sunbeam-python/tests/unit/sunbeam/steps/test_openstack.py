@@ -266,7 +266,7 @@ class PatchLoadBalancerServicesIPStepTest(unittest.TestCase):
     def test_is_skip(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(
@@ -286,7 +286,7 @@ class PatchLoadBalancerServicesIPStepTest(unittest.TestCase):
     def test_is_skip_missing_annotation(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(return_value=Mock(metadata=Mock(annotations={})))
@@ -310,7 +310,7 @@ class PatchLoadBalancerServicesIPStepTest(unittest.TestCase):
     def test_run(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(
@@ -380,7 +380,7 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
     def test_run(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(
@@ -408,7 +408,7 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
     def test_run_missing_annotation(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(return_value=Mock(metadata=Mock(annotations={})))
@@ -440,7 +440,7 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
     def test_run_same_ippool_already_allocation(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(
@@ -466,7 +466,7 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
     def test_run_different_ippool_already_allocated(self):
         self.snap_mock().config.get.return_value = "k8s"
         with patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(

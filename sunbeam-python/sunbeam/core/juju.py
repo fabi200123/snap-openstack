@@ -37,21 +37,6 @@ from typing import (
 
 import pydantic
 import yaml
-from juju import utils as juju_utils
-from juju.application import Application
-from juju.charmhub import CharmHub
-from juju.client import client as juju_client
-from juju.client import connection as juju_connection
-from juju.client import connector as juju_connector
-from juju.controller import Controller
-from juju.errors import (
-    JujuAPIError,
-    JujuConnectionError,
-    JujuError,
-)
-from juju.machine import Machine
-from juju.model import Model
-from juju.unit import Unit
 from packaging import version
 from snaphelpers import Snap
 from websockets import ConnectionClosedError
@@ -59,11 +44,34 @@ from websockets import ConnectionClosedError
 from sunbeam import utils
 from sunbeam.clusterd.client import Client
 from sunbeam.core.common import SunbeamException
+from sunbeam.lazy import LazyImport
 from sunbeam.versions import JUJU_BASE, SUPPORTED_RELEASE
 
 if TYPE_CHECKING:  # pragma: no cover
+    import juju.charmhub as juju_charmhub
+    import juju.controller as juju_controller
+    import juju.errors as juju_errors
+    from juju import utils as juju_utils
+    from juju.application import Application
+
     # import private def only for type checking
     from juju.client import _definitions as juju_def
+    from juju.client import client as juju_client
+    from juju.client import connection as juju_connection
+    from juju.client import connector as juju_connector
+    from juju.machine import Machine
+    from juju.model import Model
+    from juju.unit import Unit
+else:
+    # Lazy loaded attributes
+    juju_utils = LazyImport("juju.utils")
+    juju_client = LazyImport("juju.client.client")
+    juju_connection = LazyImport("juju.client.connection")
+    juju_connector = LazyImport("juju.client.connector")
+    juju_controller = LazyImport("juju.controller")
+    juju_errors = LazyImport("juju.errors")
+    juju_charmhub = LazyImport("juju.charmhub")
+
 
 LOG = logging.getLogger(__name__)
 CONTROLLER_MODEL = "admin/controller"
@@ -241,9 +249,9 @@ class JujuController(pydantic.BaseModel):
         """Dump self to clusterd."""
         client.cluster.update_config(JUJU_CONTROLLER_KEY, json.dumps(self.to_dict()))
 
-    def to_controller(self, juju_account: JujuAccount) -> Controller:
+    def to_controller(self, juju_account: JujuAccount) -> "juju_controller.Controller":
         """Return connected controller."""
-        controller = Controller()
+        controller = juju_controller.Controller()
         run_sync(
             controller.connect(
                 endpoint=self.api_endpoints,
@@ -260,7 +268,7 @@ class _SharedStatusUpdater:
         self._jhelper = jhelper
         self._condition = asyncio.Condition()
         self._model = model
-        self._model_impl: Model | None = None
+        self._model_impl: "Model | None" = None
 
     async def tick_status(
         self, filter: list[str] | None = None
@@ -324,7 +332,7 @@ class _SharedStatusUpdater:
                         LOG.debug("%r: model connected", name)
                 except (
                     juju_connector.NoConnectionException,
-                    JujuConnectionError,
+                    juju_errors.JujuConnectionError,
                     ConnectionClosedError,
                     PermissionError,
                 ):
@@ -363,16 +371,16 @@ class _SharedStatusUpdater:
 class JujuHelper:
     """Helper function to manage Juju apis through pylibjuju."""
 
-    def __init__(self, controller: Controller):
+    def __init__(self, controller: "juju_controller.Controller"):
         self.controller = controller
         self._controller_params = controller.connection().connect_params()
-        self.model_connectors: list[Model] = []
+        self.model_connectors: list["Model"] = []
 
     async def reconnect(self, **kwargs):
         """Force reconnection to the controller."""
         await self.disconnect()
         del self.controller
-        self.controller = Controller()
+        self.controller = juju_controller.Controller()
         await self.controller.connect(**kwargs, **self._controller_params)
 
     async def disconnect(self):
@@ -393,7 +401,7 @@ class JujuHelper:
         models = await self.controller.list_models()
         return models
 
-    async def get_model(self, model: str) -> Model:
+    async def get_model(self, model: str) -> "Model":
         """Fetch model.
 
         :model: Name of the model
@@ -408,7 +416,7 @@ class JujuHelper:
             raise e
 
     @contextlib.asynccontextmanager
-    async def get_model_closing(self, model: str) -> AsyncGenerator[Model, None]:
+    async def get_model_closing(self, model: str) -> AsyncGenerator["Model", None]:
         """Fetch model.
 
         Allow closing a model after usage.
@@ -441,7 +449,7 @@ class JujuHelper:
         cloud: str | None = None,
         credential: str | None = None,
         config: dict | None = None,
-    ) -> Model:
+    ) -> "Model":
         """Add a model.
 
         :model: Name of the model
@@ -562,7 +570,7 @@ class JujuHelper:
         async with self.get_model_closing(model) as model_impl:
             return list(model_impl.applications.keys())
 
-    async def get_application(self, name: str, model: Model) -> Application:
+    async def get_application(self, name: str, model: "Model") -> "Application":
         """Fetch application in model.
 
         :name: Application name
@@ -575,7 +583,7 @@ class JujuHelper:
             )
         return application
 
-    async def get_machines(self, model: Model) -> dict[str, Machine]:
+    async def get_machines(self, model: "Model") -> dict[str, "Machine"]:
         """Fetch machines in model.
 
         :model: Name of the model where the machines are located
@@ -636,8 +644,8 @@ class JujuHelper:
             )
 
     async def add_machine(
-        self, name: str, model: Model, base: str = JUJU_BASE
-    ) -> Machine:
+        self, name: str, model: "Model", base: str = JUJU_BASE
+    ) -> "Machine":
         """Add machine to model.
 
         Workaround for https://github.com/juju/python-libjuju/issues/1229
@@ -655,13 +663,13 @@ class JujuHelper:
         results = await client_facade.AddMachines(params=[params])
         error = results.machines[0].error
         if error:
-            raise JujuError("Error adding machine: %s" % error.message)
+            raise juju_errors.JujuError("Error adding machine: %s" % error.message)
         machine_id = results.machines[0].machine
 
         LOG.debug("Added new machine %s", machine_id)
         return await model._wait_for_new("machine", machine_id)  # type: ignore
 
-    async def get_unit(self, name: str, model: Model) -> Unit:
+    async def get_unit(self, name: str, model: "Model") -> "Unit":
         """Fetch an application's unit in model.
 
         :name: Name of the unit to wait for, name format is application/id
@@ -677,8 +685,8 @@ class JujuHelper:
         return unit
 
     async def get_unit_from_machine(
-        self, application: str, machine_id: str, model: Model
-    ) -> Unit:
+        self, application: str, machine_id: str, model: "Model"
+    ) -> "Unit":
         """Fetch a application's unit in model on a specific machine.
 
         :application: application name of the unit to look for
@@ -686,7 +694,7 @@ class JujuHelper:
         :model: Model object
         """
         app = await self.get_application(application, model)
-        unit: Unit | None = None
+        unit: "Unit | None" = None
         for u in app.units:
             if machine_id == u.machine.entity_id:
                 unit = u
@@ -708,9 +716,9 @@ class JujuHelper:
 
     async def add_unit(
         self,
-        application: Application,
+        application: "Application",
         machine: list[str] | str | None = None,
-    ) -> list[Unit]:
+    ) -> list["Unit"]:
         """Add unit to application, can be optionnally placed on a machine.
 
         :name: Application name
@@ -744,7 +752,7 @@ class JujuHelper:
 
             await application.destroy_unit(unit)
 
-    async def _get_leader_unit(self, name: str, model: Model) -> Unit:
+    async def _get_leader_unit(self, name: str, model: "Model") -> "Unit":
         """Get leader unit.
 
         :name: Application name
@@ -925,7 +933,7 @@ class JujuHelper:
             # NOTE: User, proxy, scp_options left to defaults
             await unit.scp_from(source, destination)
 
-    def _generate_juju_credential(self, user: dict) -> juju_client.CloudCredential:
+    def _generate_juju_credential(self, user: dict) -> "juju_client.CloudCredential":
         """Geenrate juju crdential object from kubeconfig user."""
         if "token" in user:
             cred = juju_client.CloudCredential(
@@ -985,7 +993,7 @@ class JujuHelper:
                 type_="kubernetes",
             )
             cloud = await self.controller.add_cloud(cloud_name, cloud)
-        except JujuAPIError as e:
+        except juju_errors.JujuAPIError as e:
             if "already exists" not in str(e):
                 raise e
 
@@ -1067,7 +1075,7 @@ class JujuHelper:
 
         async with self.get_model_closing(model) as model_impl:
             application = typing.cast(
-                Application | None, model_impl.applications.get(name)
+                "Application | None", model_impl.applications.get(name)
             )
             if application is None:
                 return
@@ -1458,7 +1466,7 @@ class JujuHelper:
         status = await self.get_model_status_full(model)
         return status["applications"].get(application_name, {}).get("charm-channel")
 
-    async def charm_refresh(self, application_name: str, model: Model):
+    async def charm_refresh(self, application_name: str, model: "Model"):
         """Update application to latest charm revision in current channel.
 
         :param application_list: Name of application
@@ -1477,7 +1485,9 @@ class JujuHelper:
         :param channel: Channel to lookup charm in
         """
         async with self.get_model_closing(model) as model_impl:
-            available_charm_data = await CharmHub(model_impl).info(charm_name, channel)
+            available_charm_data = await juju_charmhub.CharmHub(model_impl).info(
+                charm_name, channel
+            )
             version = available_charm_data["channel-map"][channel]["revision"][
                 "version"
             ]
@@ -1539,7 +1549,7 @@ class JujuHelper:
         async with self.get_model_closing(model) as model_impl:
             try:
                 await model_impl.add_space(space, subnets)
-            except JujuAPIError as e:
+            except juju_errors.JujuAPIError as e:
                 raise JujuException(f"Failed to add space {space!r}: {str(e)}") from e
 
     async def get_application_bindings(self, model: str, application: str) -> dict:
@@ -1549,7 +1559,7 @@ class JujuHelper:
             facade = app._facade()
             try:
                 app_config = await facade.Get(application=app.name)
-            except JujuError as e:
+            except juju_errors.JujuError as e:
                 raise JujuException(
                     f"Failed to get bindings for application {app.name!r}: {str(e)}"
                 ) from e
@@ -1590,7 +1600,7 @@ class JujuHelper:
             facade = app._facade()
             try:
                 await facade.MergeBindings(request)
-            except JujuError as e:
+            except juju_errors.JujuError as e:
                 raise JujuException(f"Failed to merge bindings: {str(e)}") from e
 
 
@@ -1981,7 +1991,7 @@ class JujuActionHelper:
     @staticmethod
     def get_unit(
         client: Client, jhelper: JujuHelper, model: str, node: str, app: str
-    ) -> Unit:
+    ) -> "Unit":
         """Retrieve the unit associated with the given node.
 
         Args:

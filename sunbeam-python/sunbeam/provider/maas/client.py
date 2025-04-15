@@ -17,19 +17,26 @@
 
 import collections
 import logging
-from typing import Sequence, overload
+from typing import TYPE_CHECKING, Sequence, overload
 
-from maas.client import bones, connect  # type: ignore [import-untyped]
 from rich.console import Console
 
 from sunbeam.core.deployment import Deployment, Networks
 from sunbeam.core.deployments import DeploymentsConfig
+from sunbeam.lazy import LazyImport
 from sunbeam.provider.maas.deployment import (
     MaasDeployment,
     RoleTags,
     StorageTags,
     is_maas_deployment,
 )
+
+if TYPE_CHECKING:
+    import maas.client as maas_client  # type: ignore [import-untyped]
+    import maas.client.bones as maas_bones  # type: ignore [import-untyped]
+else:
+    maas_client = LazyImport("maas.client")
+    maas_bones = LazyImport("maas.client.bones")
 
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -39,14 +46,14 @@ class MaasClient:
     """Facade to MAAS APIs."""
 
     def __init__(self, url: str, token: str, resource_tag: str | None = None):
-        self._client = connect(url, apikey=token)
+        self._client = maas_client.connect(url, apikey=token)
         self.resource_tag = resource_tag
 
     def ensure_tag(self, tag: str):
         """Create a tag if it does not already exist."""
         try:
             self._client.tags.create(name=tag)  # type: ignore
-        except bones.CallError as e:
+        except maas_bones.CallError as e:
             if "already exists" not in str(e):
                 raise e
 
@@ -61,7 +68,7 @@ class MaasClient:
             kwargs["tags"] = tags
         try:
             return self._client.machines.list.__self__._handler.read(**kwargs)  # type: ignore # noqa
-        except bones.CallError as e:
+        except maas_bones.CallError as e:
             if "No such tag(s)" in str(e):
                 raise ValueError(str(e))
             raise e

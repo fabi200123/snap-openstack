@@ -1449,7 +1449,7 @@ class TestMaasCreateLoadBalancerIPPoolsStep:
         k8s_snap = Mock()
         mocker.patch("sunbeam.core.k8s.Snap", k8s_snap)
         mocker.patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(
@@ -1487,7 +1487,7 @@ class TestMaasCreateLoadBalancerIPPoolsStep:
         k8s_snap = Mock()
         mocker.patch("sunbeam.core.k8s.Snap", k8s_snap)
         mocker.patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(return_value=Mock(get=Mock(side_effect=[None, None]))),
         )
         k8s_snap().config.get.return_value = "k8s"
@@ -1523,7 +1523,7 @@ class TestMaasCreateLoadBalancerIPPoolsStep:
         api_error = ApiError.__new__(ApiError)
         api_error.status = Mock(code=404)
         mocker.patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(
@@ -1562,7 +1562,7 @@ class TestMaasCreateLoadBalancerIPPoolsStep:
         k8s_snap = Mock()
         mocker.patch("sunbeam.core.k8s.Snap", k8s_snap)
         mocker.patch(
-            "sunbeam.core.steps.KubeClient",
+            "sunbeam.core.steps.l_client.Client",
             new=Mock(
                 return_value=Mock(
                     get=Mock(

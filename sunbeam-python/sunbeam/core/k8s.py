@@ -13,20 +13,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-from typing import Type
+from typing import TYPE_CHECKING, Type
 
-from lightkube import ApiError
-from lightkube.core.client import Client as KubeClient
-from lightkube.generic_resource import (
-    GenericNamespacedResource,
-    create_namespaced_resource,
-)
-from lightkube.models.meta_v1 import ObjectMeta
-from lightkube.resources.core_v1 import Node, PersistentVolumeClaim, Pod
-from lightkube.types import CascadeType
 from snaphelpers import Snap  # noqa: F401 - required for test mocks
 
 from sunbeam.core.common import SunbeamException
+from sunbeam.lazy import LazyImport
+
+if TYPE_CHECKING:
+    import lightkube.core.client as l_client
+    import lightkube.core.exceptions as l_exceptions
+    import lightkube.generic_resource as l_generic_resource
+    from lightkube import types as l_types
+    from lightkube.models import meta_v1
+    from lightkube.resources import core_v1
+else:
+    l_client = LazyImport("lightkube.core.client")
+    l_exceptions = LazyImport("lightkube.core.exceptions")
+    l_types = LazyImport("lightkube.types")
+    l_generic_resource = LazyImport("lightkube.generic_resource")
+    meta_v1 = LazyImport("lightkube.models.meta_v1")
+    core_v1 = LazyImport("lightkube.resources.core_v1")
+
 
 LOG = logging.getLogger(__name__)
 
@@ -102,9 +110,11 @@ class K8SHelper:
         return METALLB_ALLOCATED_POOL_ANNOTATION
 
     @classmethod
-    def get_lightkube_loadbalancer_resource(cls) -> Type[GenericNamespacedResource]:
+    def get_lightkube_loadbalancer_resource(
+        cls,
+    ) -> Type["l_generic_resource.GenericNamespacedResource"]:
         """Return lighkube generic resource of type loadbalancer."""
-        return create_namespaced_resource(
+        return l_generic_resource.create_namespaced_resource(
             "metallb.io",
             "v1beta1",
             "IPAddressPool",
@@ -113,9 +123,11 @@ class K8SHelper:
         )
 
     @classmethod
-    def get_lightkube_l2_advertisement_resource(cls) -> Type[GenericNamespacedResource]:
+    def get_lightkube_l2_advertisement_resource(
+        cls,
+    ) -> Type["l_generic_resource.GenericNamespacedResource"]:
         """Return lighkube generic resource of type l2advertisement."""
-        return create_namespaced_resource(
+        return l_generic_resource.create_namespaced_resource(
             "metallb.io",
             "v1beta1",
             "L2Advertisement",
@@ -134,22 +146,22 @@ class K8SHelper:
         return METALLB_INTERNAL_POOL_NAME
 
 
-def find_node(client: KubeClient, name: str) -> Node:
+def find_node(client: "l_client.Client", name: str) -> "core_v1.Node":
     """Find a node by name."""
     try:
-        return client.get(Node, name)
-    except ApiError as e:
+        return client.get(core_v1.Node, name)
+    except l_exceptions.ApiError as e:
         if e.status.code == 404:
             raise K8SNodeNotFoundError(f"Node {name} not found")
         raise K8SError(f"Failed to get node {name}") from e
 
 
-def cordon(client: KubeClient, name: str):
+def cordon(client: "l_client.Client", name: str):
     """Taint a node as unschedulable."""
     LOG.debug("Marking %s unschedulable", name)
     try:
-        client.patch(Node, name, {"spec": {"unschedulable": True}})
-    except ApiError as e:
+        client.patch(core_v1.Node, name, {"spec": {"unschedulable": True}})
+    except l_exceptions.ApiError as e:
         if e.status.code == 404:
             raise K8SNodeNotFoundError(f"Node {name} not found")
         raise K8SError(f"Failed to patch node {name}") from e
@@ -160,18 +172,18 @@ def is_not_daemonset(pod):
 
 
 def fetch_pods(
-    client: KubeClient,
+    client: "l_client.Client",
     namespace: str | None = None,
     labels: dict[str, str] | None = None,
     fields: dict[str, str] | None = None,
-) -> list[Pod]:
+) -> list["core_v1.Pod"]:
     """Fetch all pods on node that can be evicted.
 
     DaemonSet pods cannot be evicted as they don't respect unschedulable flag.
     """
     return list(
         client.list(
-            res=Pod,
+            res=core_v1.Pod,
             namespace=namespace if namespace else "*",
             labels=labels,  # type: ignore
             fields=fields,  # type: ignore
@@ -180,8 +192,8 @@ def fetch_pods(
 
 
 def fetch_pods_for_eviction(
-    client: KubeClient, node_name: str, labels: dict[str, str] | None = None
-) -> list[Pod]:
+    client: "l_client.Client", node_name: str, labels: dict[str, str] | None = None
+) -> list["core_v1.Pod"]:
     """Fetch all pods on node that can be evicted.
 
     DaemonSet pods cannot be evicted as they don't respect unschedulable flag.
@@ -194,20 +206,22 @@ def fetch_pods_for_eviction(
     return list(filter(is_not_daemonset, pods))
 
 
-def evict_pods(client: KubeClient, pods: list[Pod]) -> None:
+def evict_pods(client: "l_client.Client", pods: list["core_v1.Pod"]) -> None:
     for pod in pods:
         if pod.metadata is None:
             continue
         LOG.debug(f"Evicting pod {pod.metadata.name}")
-        evict = Pod.Eviction(
-            metadata=ObjectMeta(
+        evict = core_v1.Pod.Eviction(
+            metadata=meta_v1.ObjectMeta(
                 name=pod.metadata.name, namespace=pod.metadata.namespace
             ),
         )
         client.create(evict, name=str(pod.metadata.name))
 
 
-def fetch_pvc(client: KubeClient, pods: list[Pod]) -> list[PersistentVolumeClaim]:
+def fetch_pvc(
+    client: "l_client.Client", pods: list["core_v1.Pod"]
+) -> list["core_v1.PersistentVolumeClaim"]:
     pvc = []
     for pod in pods:
         if pod.spec is None or pod.spec.volumes is None:
@@ -219,7 +233,7 @@ def fetch_pvc(client: KubeClient, pods: list[Pod]) -> list[PersistentVolumeClaim
             pvc_name = volume.persistentVolumeClaim.claimName
             pvc.append(
                 client.get(
-                    res=PersistentVolumeClaim,
+                    res=core_v1.PersistentVolumeClaim,
                     name=pvc_name,
                     namespace=pod.metadata.namespace,  # type: ignore
                 )
@@ -227,21 +241,23 @@ def fetch_pvc(client: KubeClient, pods: list[Pod]) -> list[PersistentVolumeClaim
     return pvc
 
 
-def delete_pvc(client: KubeClient, pvcs: list[PersistentVolumeClaim]) -> None:
+def delete_pvc(
+    client: "l_client.Client", pvcs: list["core_v1.PersistentVolumeClaim"]
+) -> None:
     for pvc in pvcs:
         if pvc.metadata is None:
             continue
         LOG.debug("Deleting PVC %s", pvc.metadata.name)
         client.delete(
-            PersistentVolumeClaim,
+            core_v1.PersistentVolumeClaim,
             pvc.metadata.name,  # type: ignore
             namespace=pvc.metadata.namespace,  # type: ignore
             grace_period=0,
-            cascade=CascadeType.FOREGROUND,
+            cascade=l_types.CascadeType.FOREGROUND,
         )
 
 
-def drain(client: KubeClient, name: str):
+def drain(client: "l_client.Client", name: str):
     """Evict all pods from a node."""
     pods = fetch_pods_for_eviction(client, name)
     pvcs = fetch_pvc(client, pods)

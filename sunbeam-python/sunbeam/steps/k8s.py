@@ -16,12 +16,10 @@
 import ipaddress
 import logging
 import subprocess
+import typing
 
 import tenacity
 import yaml
-from lightkube import ApiError, ConfigError, KubeConfig
-from lightkube.core.client import Client as KubeClient
-from lightkube.models.meta_v1 import ObjectMeta
 from rich.console import Console
 
 from sunbeam.clusterd.client import Client
@@ -82,6 +80,19 @@ from sunbeam.core.steps import (
     RemoveMachineUnitsStep,
 )
 from sunbeam.core.terraform import TerraformHelper
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import lightkube.config.kubeconfig as l_kubeconfig
+    import lightkube.core.client as l_client
+    import lightkube.core.exceptions as l_exceptions
+    from lightkube.models import meta_v1
+else:
+    l_kubeconfig = LazyImport("lightkube.config.kubeconfig")
+    l_client = LazyImport("lightkube.core.client")
+    l_exceptions = LazyImport("lightkube.core.exceptions")
+    meta_v1 = LazyImport("lightkube.models.meta_v1")
+
 
 LOG = logging.getLogger(__name__)
 K8S_CONFIG_KEY = "TerraformVarsK8S"
@@ -578,10 +589,10 @@ class _CommonK8SStepMixin:
             LOG.debug("K8S kubeconfig not found", exc_info=True)
             return Result(ResultType.FAILED, "K8S kubeconfig not found")
 
-        self.kubeconfig = KubeConfig.from_dict(kubeconfig)
+        self.kubeconfig = l_kubeconfig.KubeConfig.from_dict(kubeconfig)
         try:
-            self.kube = KubeClient(self.kubeconfig, self.model, trust_env=False)
-        except ConfigError as e:
+            self.kube = l_client.Client(self.kubeconfig, self.model, trust_env=False)
+        except l_exceptions.ConfigError as e:
             LOG.debug("Error creating k8s client", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
@@ -618,7 +629,9 @@ class MigrateK8SKubeconfigStep(BaseStep, _CommonK8SStepMixin):
         self.jhelper = jhelper
         self.model = model
 
-    def _get_endpoint_from_kubeconfig(self, kubeconfig: KubeConfig) -> str:
+    def _get_endpoint_from_kubeconfig(
+        self, kubeconfig: "l_kubeconfig.KubeConfig"
+    ) -> str:
         current_context = kubeconfig.current_context
         if current_context is None:
             raise K8SError("Current context not found in kubeconfig")
@@ -659,7 +672,9 @@ class MigrateK8SKubeconfigStep(BaseStep, _CommonK8SStepMixin):
                 ResultType.FAILED,
                 "ERROR: Failed to retrieve kubeconfig",
             )
-        current_node_kubeconfig = KubeConfig.from_dict(yaml.safe_load(kubeconfig))
+        current_node_kubeconfig = l_kubeconfig.KubeConfig.from_dict(
+            yaml.safe_load(kubeconfig)
+        )
         try:
             node_endpoint = self._get_endpoint_from_kubeconfig(current_node_kubeconfig)
         except K8SError as e:
@@ -870,7 +885,7 @@ class DrainK8SUnitStep(BaseStep, _CommonK8SStepMixin):
         retry=tenacity.retry_if_exception_type(ValueError),
         reraise=True,
     )
-    def _wait_for_evicted_pods(self, kube: KubeClient, name: str):
+    def _wait_for_evicted_pods(self, kube: "l_client.Client", name: str):
         """Wait for pods to be evicted."""
         pods_for_eviction = fetch_pods_for_eviction(kube, name)
         LOG.debug("Pods for eviction: %d", len(pods_for_eviction))
@@ -981,7 +996,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
         return self._name_label(network) + "-" + name
 
     def _get_outdated_l2_advertisement(
-        self, nodes: list[dict], kube: KubeClient
+        self, nodes: list[dict], kube: "l_client.Client"
     ) -> tuple[list[str], list[str]]:
         """Get outdated L2 advertisement."""
         outdated: list[str] = [node["name"] for node in nodes]
@@ -1078,12 +1093,12 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
             LOG.debug("K8S kubeconfig not found", exc_info=True)
             return Result(ResultType.FAILED, "K8S kubeconfig not found")
 
-        self.kubeconfig = KubeConfig.from_dict(kubeconfig)
+        self.kubeconfig = l_kubeconfig.KubeConfig.from_dict(kubeconfig)
         try:
-            self.kube = KubeClient(
+            self.kube = l_client.Client(
                 self.kubeconfig, self.l2_advertisement_namespace, trust_env=False
             )
-        except ConfigError as e:
+        except l_exceptions.ConfigError as e:
             LOG.debug("Error creating k8s client", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
@@ -1091,7 +1106,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
             outdated, deleted = self._get_outdated_l2_advertisement(
                 self.control_nodes, self.kube
             )
-        except (ApiError, self._L2AdvertisementError) as e:
+        except (l_exceptions.ApiError, self._L2AdvertisementError) as e:
             LOG.debug("Failed to get outdated L2 advertisement", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
@@ -1120,7 +1135,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
             try:
                 self.kube.apply(
                     self.l2_advertisement_resource(
-                        metadata=ObjectMeta(
+                        metadata=meta_v1.ObjectMeta(
                             name=self._l2_advertisement_name(name),
                             labels=self._labels(
                                 name, self.deployment.get_space(self.network)
@@ -1141,7 +1156,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
                     field_manager=self.deployment.name,
                     force=True,
                 )
-            except ApiError:
+            except l_exceptions.ApiError:
                 LOG.debug("Failed to update L2 advertisement", exc_info=True)
                 return Result(
                     ResultType.FAILED, f"Failed to update L2 advertisement for {name}"
@@ -1154,7 +1169,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
                     self._l2_advertisement_name(node["name"]),
                     namespace=self.l2_advertisement_namespace,
                 )
-            except ApiError:
+            except l_exceptions.ApiError:
                 LOG.debug("Failed to delete L2 advertisement", exc_info=True)
                 continue
 

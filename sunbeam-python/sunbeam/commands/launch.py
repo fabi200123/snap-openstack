@@ -15,9 +15,9 @@
 
 import logging
 import os
+import typing
 
 import click
-import openstack
 import petname  # type: ignore [import-untyped]
 from rich.console import Console
 from snaphelpers import Snap
@@ -27,6 +27,12 @@ from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import JujuHelper, run_sync
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.core.terraform import TerraformException
+from sunbeam.lazy import LazyImport
+
+if typing.TYPE_CHECKING:
+    import openstack
+else:
+    openstack = LazyImport("openstack")
 
 LOG = logging.getLogger(__name__)
 INSTANCE_WAIT_TIMEOUT = 360  # 6 min
