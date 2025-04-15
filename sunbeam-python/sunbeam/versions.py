@@ -14,8 +14,7 @@ SUNBEAM_MACHINE_CHANNEL = "2024.1/stable"
 SUNBEAM_CLUSTERD_CHANNEL = "2024.1/stable"
 SNAP_SUNBEAM_CLUSTERD_CHANNEL = "2024.1/stable"
 MYSQL_CHANNEL = "8.0/stable"
-CERT_AUTH_CHANNEL = "latest/beta"
-SUNBEAM_SSC_CHANNEL = "latest/beta"
+CERT_AUTH_CHANNEL = "1/stable"
 BIND_CHANNEL = "9/stable"
 VAULT_CHANNEL = "1.16/stable"
 CONSUL_CHANNEL = "1.19/edge"
@@ -52,7 +51,7 @@ MACHINE_CHARMS = {
     "openstack-hypervisor": OPENSTACK_CHANNEL,
     "sunbeam-machine": SUNBEAM_MACHINE_CHANNEL,
     "sunbeam-clusterd": SUNBEAM_CLUSTERD_CHANNEL,
-    "sunbeam-ssc": SUNBEAM_SSC_CHANNEL,
+    "self-signed-certificates": CERT_AUTH_CHANNEL,
     "cinder-volume": OPENSTACK_CHANNEL,
     "cinder-volume-ceph": OPENSTACK_CHANNEL,
 }
