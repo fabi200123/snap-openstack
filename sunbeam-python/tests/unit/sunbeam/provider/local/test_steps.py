@@ -77,7 +77,7 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         load_answers.return_value = {"user": {"remote_access_location": "remote"}}
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
-        local_hypervisor_bank_mock.nic.ask.return_value = "eth2"
+        local_hypervisor_bank_mock.nics.ask.return_value = "eth2"
         step = local_steps.LocalSetHypervisorUnitsOptionsStep(
             cclient, "maas0.local", jhelper, "test-model"
         )
@@ -101,7 +101,7 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         load_answers.return_value = {"user": {"remote_access_location": "remote"}}
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
-        local_hypervisor_bank_mock.nic.ask.return_value = "eth2"
+        local_hypervisor_bank_mock.nics.ask.return_value = "eth2"
         step = local_steps.LocalSetHypervisorUnitsOptionsStep(
             cclient, "maas0.local", jhelper, "test-model", join_mode=True
         )
@@ -119,7 +119,7 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         load_answers.return_value = {"user": {"remote_access_location": "local"}}
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
-        local_hypervisor_bank_mock.nic.ask.return_value = "eth12"
+        local_hypervisor_bank_mock.nics.ask.return_value = "eth12"
         step = local_steps.LocalSetHypervisorUnitsOptionsStep(
             cclient, "maas0.local", jhelper, "tes-model"
         )
@@ -136,7 +136,7 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         load_answers.return_value = {"user": {"remote_access_location": "local"}}
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
-        local_hypervisor_bank_mock.nic.ask.return_value = "eth2"
+        local_hypervisor_bank_mock.nics.ask.return_value = "eth2"
         step = local_steps.LocalSetHypervisorUnitsOptionsStep(
             cclient, "maas0.local", jhelper, "test-model", join_mode=True
         )

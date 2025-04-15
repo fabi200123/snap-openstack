@@ -183,7 +183,12 @@ class CoreConfig(pydantic.BaseModel):
         remote_access_location: typing.Literal["local", "remote"] | None = None
 
     class _ExternalNetwork(pydantic.BaseModel):
-        nic: str | None = None
+        nic: str | None = pydantic.Field(
+            None, deprecated="Deprecated. Use `nics` instead."
+        )
+        nics: dict[str, str] | None = pydantic.Field(
+            None, description="Mapping of key hostname to nic name."
+        )
         cidr: str | None = None
         gateway: str | None = None
         range: str | None = None
