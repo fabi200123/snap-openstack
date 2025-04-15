@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 - Canonical Ltd
+# SPDX-License-Identifier: Apache-2.0
+
 output "OS_USERNAME" {
   description = "OpenStack username"
   value       = openstack_identity_user_v3.user.name
