@@ -16,7 +16,7 @@ from sunbeam.versions import JUJU_BASE
 
 LOG = logging.getLogger(__name__)
 APPLICATION = "tls-operator"
-CHARM = "sunbeam-ssc"
+CHARM = "self-signed-certificates"
 CERTIFICATES_APP_TIMEOUT = 1200
 
 
