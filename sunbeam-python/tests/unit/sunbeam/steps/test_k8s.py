@@ -20,6 +20,7 @@ from sunbeam.steps.k8s import (
     K8S_CLOUD_SUFFIX,
     AddK8SCloudStep,
     AddK8SCredentialStep,
+    EnsureDefaultL2AdvertisementMutedStep,
     EnsureL2AdvertisementByHostStep,
     StoreK8SKubeConfigStep,
 )
@@ -519,3 +520,141 @@ def test_get_outdated_l2_advertisement(
 
     assert outdated_res == outdated
     assert deleted_res == deleted
+
+
+class TestEnsureDefaultL2AdvertisementMutedStep(unittest.TestCase):
+    def setUp(self):
+        self.deployment = Mock()
+        self.deployment.name = "test-deployment"
+        self.client = Mock()
+        self.jhelper = Mock()
+        self.kubeconfig = Mock()
+        self.kube = Mock()
+        self.l2_advertisement_resource = Mock()
+        self.l2_advertisement_namespace = "test-namespace"
+        self.default_l2_advertisement = "default-pool"
+        self.node_selectors = [
+            {
+                "matchLabels": {
+                    "kubernetes.io/hostname": "not-existing.sunbeam",
+                }
+            }
+        ]
+
+        # Patch K8SHelper static methods
+        self.k8shelper_patch = patch.multiple(
+            "sunbeam.steps.k8s.K8SHelper",
+            get_lightkube_l2_advertisement_resource=Mock(
+                return_value=self.l2_advertisement_resource
+            ),
+            get_loadbalancer_namespace=Mock(
+                return_value=self.l2_advertisement_namespace
+            ),
+            get_internal_pool_name=Mock(return_value=self.default_l2_advertisement),
+            get_kubeconfig_key=Mock(return_value="kubeconfig-key"),
+        )
+        self.k8shelper_patch.start()
+
+        # Patch l_kubeconfig and l_client
+        self.kubeconfig_patch = patch(
+            "sunbeam.steps.k8s.l_kubeconfig.KubeConfig",
+            Mock(from_dict=Mock(return_value=self.kubeconfig)),
+        )
+        self.kubeconfig_patch.start()
+        self.kube_patch = patch(
+            "sunbeam.steps.k8s.l_client.Client",
+            Mock(return_value=self.kube),
+        )
+        self.kube_patch.start()
+
+        # Patch meta_v1
+        self.meta_v1_patch = patch(
+            "sunbeam.steps.k8s.meta_v1.ObjectMeta",
+            Mock(return_value=Mock()),
+        )
+        self.meta_v1_patch.start()
+
+        self.addCleanup(self.k8shelper_patch.stop)
+        self.addCleanup(self.kubeconfig_patch.stop)
+        self.addCleanup(self.kube_patch.stop)
+        self.addCleanup(self.meta_v1_patch.stop)
+
+    def test_is_skip_kubeconfig_not_found(self):
+        with patch(
+            "sunbeam.steps.k8s.read_config", side_effect=ConfigItemNotFoundException
+        ):
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            result = step.is_skip()
+        assert result.result_type == ResultType.FAILED
+        assert "kubeconfig not found" in result.message
+
+    def test_is_skip_l2_advertisement_not_found(self):
+        api_error = ApiError.__new__(ApiError)
+        api_error.status = Mock(code=404)
+        self.kube.get = Mock(side_effect=api_error)
+        with patch("sunbeam.steps.k8s.read_config", return_value={}):
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            result = step.is_skip()
+        assert result.result_type == ResultType.SKIPPED
+
+    def test_is_skip_l2_advertisement_api_error_other(self):
+        api_error = ApiError.__new__(ApiError)
+        api_error.status = Mock(code=500)
+        with patch("sunbeam.steps.k8s.read_config", return_value={}):
+            self.kube.get = Mock(side_effect=api_error)
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            result = step.is_skip()
+        assert result.result_type == ResultType.FAILED
+
+    def test_is_skip_l2_advertisement_already_muted(self):
+        l2_advertisement = Mock()
+        l2_advertisement.spec = {"nodeSelectors": self.node_selectors}
+        with patch("sunbeam.steps.k8s.read_config", return_value={}):
+            self.kube.get = Mock(return_value=l2_advertisement)
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            result = step.is_skip()
+        assert result.result_type == ResultType.SKIPPED
+
+    def test_is_skip_l2_advertisement_needs_muting(self):
+        l2_advertisement = Mock()
+        l2_advertisement.spec = {"nodeSelectors": [{"matchLabels": {"foo": "bar"}}]}
+        with patch("sunbeam.steps.k8s.read_config", return_value={}):
+            self.kube.get = Mock(return_value=l2_advertisement)
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            result = step.is_skip()
+        assert result.result_type == ResultType.COMPLETED
+
+    def test_run_success(self):
+        with patch("sunbeam.steps.k8s.read_config", return_value={}):
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            step.kube = self.kube
+            self.kube.apply = Mock(return_value=None)
+            result = step.run(None)
+        self.kube.apply.assert_called_once()
+        assert result.result_type == ResultType.COMPLETED
+
+    def test_run_api_error(self):
+        api_error = ApiError.__new__(ApiError)
+        api_error.status = Mock(code=500)
+        with patch("sunbeam.steps.k8s.read_config", return_value={}):
+            step = EnsureDefaultL2AdvertisementMutedStep(
+                self.deployment, self.client, self.jhelper
+            )
+            step.kube = self.kube
+            self.kube.apply = Mock(side_effect=api_error)
+            result = step.run(None)
+        self.kube.apply.assert_called_once()
+        assert result.result_type == ResultType.FAILED
+        assert "Failed to update L2 default advertisement" in result.message

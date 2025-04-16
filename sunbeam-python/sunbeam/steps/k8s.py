@@ -1162,3 +1162,106 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
                 continue
 
         return Result(ResultType.COMPLETED)
+
+
+class EnsureDefaultL2AdvertisementMutedStep(BaseStep):
+    """Ensure default l2 advertisement is muted."""
+
+    _APPLICATION = APPLICATION
+
+    def __init__(
+        self,
+        deployment: Deployment,
+        client: Client,
+        jhelper: JujuHelper,
+    ):
+        super().__init__(
+            "Mute default L2 advertisement",
+            "Ensuring default L2 advertisement is muted",
+        )
+        self.deployment = deployment
+        self.client = client
+        self.jhelper = jhelper
+        self.l2_advertisement_resource = (
+            K8SHelper.get_lightkube_l2_advertisement_resource()
+        )
+        self.l2_advertisement_namespace = K8SHelper.get_loadbalancer_namespace()
+        # Default l2 advertisement has the name of the pool
+        self.default_l2_advertisement = K8SHelper.get_internal_pool_name()
+        self.node_selectors = [
+            {
+                "matchLabels": {
+                    "kubernetes.io/hostname": "not-existing.sunbeam",
+                }
+            }
+        ]
+
+    def is_skip(self, status: Status | None = None) -> Result:
+        """Determines if the step should be skipped or not.
+
+        :return: ResultType.SKIPPED if the Step should be skipped,
+                 ResultType.COMPLETED or ResultType.FAILED otherwise
+        """
+        try:
+            kubeconfig = read_config(self.client, K8SHelper.get_kubeconfig_key())
+        except ConfigItemNotFoundException:
+            LOG.debug("K8S kubeconfig not found", exc_info=True)
+            return Result(ResultType.FAILED, "K8S kubeconfig not found")
+
+        self.kubeconfig = l_kubeconfig.KubeConfig.from_dict(kubeconfig)
+        try:
+            self.kube = l_client.Client(
+                self.kubeconfig, self.l2_advertisement_namespace, trust_env=False
+            )
+        except l_exceptions.ConfigError as e:
+            LOG.debug("Error creating k8s client", exc_info=True)
+            return Result(ResultType.FAILED, str(e))
+
+        try:
+            l2_advertisement = self.kube.get(
+                self.l2_advertisement_resource,
+                self.default_l2_advertisement,
+                namespace=self.l2_advertisement_namespace,
+            )
+        except l_exceptions.ApiError as e:
+            if e.status.code == 404:
+                LOG.debug("L2 advertisement not found, skipping")
+                return Result(ResultType.SKIPPED)
+            LOG.debug("Failed to get default L2 advertisement", exc_info=True)
+            return Result(ResultType.FAILED, str(e))
+
+        if (
+            l2_advertisement.spec
+            and l2_advertisement.spec.get("nodeSelectors") == self.node_selectors
+        ):
+            return Result(ResultType.SKIPPED)
+
+        return Result(ResultType.COMPLETED)
+
+    def run(self, status: Status | None) -> Result:
+        """Run the step to completion.
+
+        Invoked when the step is run and returns a ResultType to indicate
+
+        :return:
+        """
+        try:
+            self.kube.apply(
+                self.l2_advertisement_resource(
+                    metadata=meta_v1.ObjectMeta(
+                        name=self.default_l2_advertisement,
+                    ),
+                    spec={
+                        "nodeSelectors": self.node_selectors,
+                    },
+                ),
+                field_manager=self.deployment.name,
+                force=True,
+            )
+        except l_exceptions.ApiError:
+            LOG.debug("Failed to update default L2 advertisement", exc_info=True)
+            return Result(
+                ResultType.FAILED, "Failed to update L2 default advertisement"
+            )
+
+        return Result(ResultType.COMPLETED)
