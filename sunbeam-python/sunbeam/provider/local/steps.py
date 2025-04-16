@@ -30,7 +30,7 @@ console = Console()
 
 def local_hypervisor_questions():
     return {
-        "nic": sunbeam.core.questions.PromptQuestion(
+        "nics": sunbeam.core.questions.PromptQuestion(
             "External network's interface",
             description=(
                 "Interface used by networking layer to allow remote access to cloud"
@@ -112,7 +112,7 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
         )
         nic = None
         while True:
-            nic = local_hypervisor_bank.nic.ask(
+            nic = local_hypervisor_bank.nics.ask(
                 new_default=candidate_nics[0], new_choices=candidate_nics
             )
             if not nic:
@@ -172,10 +172,19 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
         if self.join_mode or remote_access_location == utils.REMOTE_ACCESS:
             # If nic is in the preseed assume the user knows what they are doing and
             # bypass validation
+            host = self.names[0]
+            nics = preseed.get("nics")
+            if nics and (nic := nics.get(host)):
+                self.nics[host] = nic
+                return
+
             if nic := preseed.get("nic"):
-                self.nics[self.names[0]] = nic
-            else:
-                self.nics[self.names[0]] = self.prompt_for_nic()
+                LOG.warning(
+                    "DEPRECATED: Using deprecated `nic` field for host %r", host
+                )
+                self.nics[host] = nic
+                return
+            self.nics[host] = self.prompt_for_nic(console)
 
 
 class LocalClusterStatusStep(ClusterStatusStep):
