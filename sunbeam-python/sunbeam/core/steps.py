@@ -6,6 +6,7 @@ import asyncio
 import logging
 import typing
 
+import tenacity
 from rich.status import Status
 
 from sunbeam.clusterd.client import Client
@@ -710,6 +711,37 @@ class PatchLoadBalancerServicesIPPoolStep(BaseStep, abc.ABC):
 
         return False
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(10),
+        stop=tenacity.stop_after_delay(120),
+        retry=tenacity.retry_if_exception_type(ValueError),
+        reraise=True,
+    )
+    def _wait_for_ip_allocated_from_pool_annotation_update(
+        self, service_name: str, pool_name: str
+    ):
+        """Wait until metallb.universe.tf/ip-allocated-from-pool is updated.
+
+        Wait until the ip-allocated-from-pool annotation is updated to pool_name
+        for the service
+        Raises ApiError from lightkube if not connected to k8s
+        """
+        service = self._get_service(service_name, find_lb=False)
+        LOG.debug(f"Waiting for service {service} annotations to get updated")
+
+        if not service.metadata:
+            raise ValueError(f"Service {service_name} has no metadata")
+
+        service_annotations = service.metadata.annotations
+        if service_annotations is None:
+            service_annotations = {}
+
+        if service_annotations.get(self.lb_allocated_pool_annotation) != pool_name:
+            raise ValueError(
+                f"Service {service_name} annotation {self.lb_allocated_pool_annotation}"
+                f" is not updated to {pool_name}"
+            )
+
     def run(self, status: Status | None = None) -> Result:
         """Patch LoadBalancer services annotations with LB IP pool."""
         try:
@@ -775,6 +807,13 @@ class PatchLoadBalancerServicesIPPoolStep(BaseStep, abc.ABC):
                     f"{self.lb_pool_annotation!r} with value {self.pool_name!r}"
                 )
                 self.kube.patch(core_v1.Service, service_name, obj=service)
+
+                try:
+                    self._wait_for_ip_allocated_from_pool_annotation_update(
+                        service_name, self.pool_name
+                    )
+                except ValueError as e:
+                    return Result(ResultType.FAILED, str(e))
 
         return Result(ResultType.COMPLETED)
 

@@ -368,21 +368,35 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
 
     def test_run(self):
         self.snap_mock().config.get.return_value = "k8s"
-        with patch(
-            "sunbeam.core.steps.l_client.Client",
-            new=Mock(
-                return_value=Mock(
-                    get=Mock(
-                        return_value=Mock(
-                            metadata=Mock(
-                                annotations={
-                                    METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name
-                                }
-                            )
-                        )
-                    )
+        kube_get_mock = Mock()
+        kube_get_mock.side_effect = [
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                    }
                 )
             ),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: self.pool_name,
+                    }
+                )
+            ),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: self.pool_name,
+                    }
+                )
+            ),
+        ]
+        with patch(
+            "sunbeam.core.steps.l_client.Client",
+            new=Mock(return_value=Mock(get=kube_get_mock)),
         ):
             step = OpenStackPatchLoadBalancerServicesIPPoolStep(
                 self.client, self.pool_name
@@ -396,13 +410,29 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
 
     def test_run_missing_annotation(self):
         self.snap_mock().config.get.return_value = "k8s"
-        with patch(
-            "sunbeam.core.steps.l_client.Client",
-            new=Mock(
-                return_value=Mock(
-                    get=Mock(return_value=Mock(metadata=Mock(annotations={})))
+        kube_get_mock = Mock()
+        kube_get_mock.side_effect = [
+            Mock(metadata=Mock(annotations={})),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: self.pool_name,
+                    }
                 )
             ),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: self.pool_name,
+                    }
+                )
+            ),
+        ]
+        with patch(
+            "sunbeam.core.steps.l_client.Client",
+            new=Mock(return_value=Mock(get=kube_get_mock)),
         ):
             step = OpenStackPatchLoadBalancerServicesIPPoolStep(
                 self.client, self.pool_name
@@ -454,22 +484,44 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
 
     def test_run_different_ippool_already_allocated(self):
         self.snap_mock().config.get.return_value = "k8s"
-        with patch(
-            "sunbeam.core.steps.l_client.Client",
-            new=Mock(
-                return_value=Mock(
-                    get=Mock(
-                        return_value=Mock(
-                            metadata=Mock(
-                                annotations={
-                                    METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
-                                    METALLB_ALLOCATED_POOL_ANNOTATION: "another-pool",
-                                }
-                            )
-                        )
-                    )
+        kube_get_mock = Mock()
+        kube_get_mock.side_effect = [
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: "another-pool",
+                    }
                 )
             ),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: "another-pool",
+                    }
+                )
+            ),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: self.pool_name,
+                    }
+                )
+            ),
+            Mock(
+                metadata=Mock(
+                    annotations={
+                        METALLB_ADDRESS_POOL_ANNOTATION: self.pool_name,
+                        METALLB_ALLOCATED_POOL_ANNOTATION: self.pool_name,
+                    }
+                )
+            ),
+        ]
+        with patch(
+            "sunbeam.core.steps.l_client.Client",
+            new=Mock(return_value=Mock(get=kube_get_mock)),
         ):
             step = OpenStackPatchLoadBalancerServicesIPPoolStep(
                 self.client, self.pool_name
