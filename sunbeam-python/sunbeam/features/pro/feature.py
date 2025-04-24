@@ -4,6 +4,7 @@
 """Ubuntu Pro subscription management feature."""
 
 import logging
+import re
 from pathlib import Path
 
 import click
@@ -109,11 +110,14 @@ class EnableUbuntuProApplicationStep(BaseStep, JujuStepHelper):
             # Check status of pro application for any token issues
             pro_app = run_sync(self.jhelper.get_application(APPLICATION, model))
             if pro_app.status == "blocked":
-                message = "unknown error"
-                for unit in pro_app.units:
-                    if "invalid token" in unit.workload_status_message:
-                        message = "invalid token"
-                LOG.warning(f"Unable to enable Ubuntu Pro: {message}")
+                re_match = re.search(
+                    ".*stderr:(.*)stdout.*", pro_app.status_message, re.DOTALL
+                )
+                if re_match:
+                    message = re_match.group(1)
+                else:
+                    message = pro_app.status_message
+
                 return Result(ResultType.FAILED, message)
         except TimeoutException as e:
             LOG.warning(str(e))
