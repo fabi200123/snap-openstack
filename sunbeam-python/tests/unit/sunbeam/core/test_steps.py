@@ -5,6 +5,7 @@ import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import tenacity
 
 from sunbeam.core.common import ResultType
 from sunbeam.core.juju import ApplicationNotFoundException, TimeoutException
@@ -204,6 +205,7 @@ class TestDeployMachineApplicationStep:
             "app1",
             "model1",
         )
+        step.run.retry.wait = tenacity.wait_none()
         result = step.run()
 
         tfhelper.update_tfvars_and_apply_tf.assert_called()
