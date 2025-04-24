@@ -1321,6 +1321,42 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
 
         return Result(ResultType.COMPLETED)
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(15),
+        stop=tenacity.stop_after_delay(600),
+        retry=tenacity.retry_if_exception_type(tenacity.TryAgain),
+        reraise=True,
+    )
+    def _ensure_l2_advertisement(self, name: str, interface: str):
+        try:
+            self.kube.apply(
+                self.l2_advertisement_resource(
+                    metadata=meta_v1.ObjectMeta(
+                        name=self._l2_advertisement_name(name),
+                        labels=self._labels(
+                            name, self.deployment.get_space(self.network)
+                        ),
+                    ),
+                    spec={
+                        "ipAddressPools": [self.pool],
+                        "interfaces": [interface],
+                        "nodeSelectors": [
+                            {
+                                "matchLabels": {
+                                    HOSTNAME_LABEL: name,
+                                }
+                            }
+                        ],
+                    },
+                ),
+                field_manager=self.deployment.name,
+                force=True,
+            )
+        except l_exceptions.ApiError as e:
+            if e.status.code == 500 and "failed calling webhook" in str(e.status):
+                raise tenacity.TryAgain("Trying to patch again")
+            raise
+
     def run(self, status: Status | None) -> Result:
         """Run the step to completion.
 
@@ -1332,29 +1368,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
             name = node["name"]
             interface = self._get_interface(node, self.network)
             try:
-                self.kube.apply(
-                    self.l2_advertisement_resource(
-                        metadata=meta_v1.ObjectMeta(
-                            name=self._l2_advertisement_name(name),
-                            labels=self._labels(
-                                name, self.deployment.get_space(self.network)
-                            ),
-                        ),
-                        spec={
-                            "ipAddressPools": [self.pool],
-                            "interfaces": [interface],
-                            "nodeSelectors": [
-                                {
-                                    "matchLabels": {
-                                        HOSTNAME_LABEL: name,
-                                    }
-                                }
-                            ],
-                        },
-                    ),
-                    field_manager=self.deployment.name,
-                    force=True,
-                )
+                self._ensure_l2_advertisement(name, interface)
             except l_exceptions.ApiError:
                 LOG.debug("Failed to update L2 advertisement", exc_info=True)
                 return Result(

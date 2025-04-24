@@ -2,12 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import httpx
 import lightkube
 import lightkube.core.exceptions
 import pytest
+import tenacity
 from lightkube import ApiError
 
 from sunbeam.clusterd.service import ConfigItemNotFoundException
@@ -379,6 +382,23 @@ class TestEnsureL2AdvertisementByHostStep(unittest.TestCase):
         self.deployment.get_space.return_value = "management"
         with self.assertRaises(EnsureL2AdvertisementByHostStep._L2AdvertisementError):
             self.step._get_interface({"name": "node1", "machineid": "1"}, self.network)
+
+    def test_ensure_l2_advertisement_retry(self):
+        api_error = ApiError(
+            Mock(),
+            httpx.Response(
+                status_code=500,
+                content=json.dumps(
+                    {
+                        "code": 500,
+                        "reason": 'Internal error occurred: failed calling webhook "l2advertisementvalidationwebhook.metallb.io"',
+                    }
+                ),
+            ),
+        )
+        self.step.kube.apply.side_effect = [api_error, None]
+        self.step._ensure_l2_advertisement.retry.wait = tenacity.wait_none()
+        self.step._ensure_l2_advertisement("node1", "eth0")
 
 
 def _to_kube_object(
