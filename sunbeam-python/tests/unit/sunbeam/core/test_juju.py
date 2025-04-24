@@ -849,7 +849,7 @@ async def test_wait_until_status_coroutine_cancelled(
             shared_updater, "app1", None, None, {"active"}, None
         )
     )
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
     # cancelling the task should not raise an exception
     task.cancel()
 
@@ -1011,7 +1011,7 @@ async def test_model_ticker_runs_until_cancelled(jhelper: juju.JujuHelper):
 
     ticker_task = asyncio.create_task(jhelper._model_ticker(shared_updater))
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
     ticker_task.cancel()
 
     await ticker_task
@@ -1025,7 +1025,7 @@ async def test_model_ticker_silences_exceptions(jhelper: juju.JujuHelper):
         "Test exception"
     )
     ticker_task = asyncio.create_task(jhelper._model_ticker(shared_updater))
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
 
     ticker_task.cancel()
     assert shared_updater.reconnect_model_and_notify_awaiters.call_count > 0
@@ -1042,7 +1042,7 @@ async def test_tick_status_yields_status(jhelper: juju.JujuHelper):
     with patch.object(shared_updater, "is_connected", Mock(return_value=True)):
 
         async def unlock():
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.01)
             async with shared_updater._condition:
                 shared_updater._condition.notify_all()
 
@@ -1070,7 +1070,7 @@ async def test_tick_status_retries_on_connection_closed_error(
 
         async def unlock():
             for i in range(2):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.01)
                 async with shared_updater._condition:
                     shared_updater._condition.notify_all()
 
@@ -1089,7 +1089,7 @@ async def test_tick_status_handles_cancelled_error(
     shared_updater = juju._SharedStatusUpdater(jhelper, "control-plane")
     shared_updater._model_impl = Mock()
     task = asyncio.create_task(asyncio.sleep(10))
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
     task.cancel()
     shared_updater._model_impl.get_status.return_value = task
 
@@ -1097,13 +1097,13 @@ async def test_tick_status_handles_cancelled_error(
 
         async def unlock():
             for i in range(2):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.01)
                 async with shared_updater._condition:
                     shared_updater._condition.notify_all()
 
         gen = shared_updater.tick_status()
         asyncio.create_task(unlock())
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.01)
         with pytest.raises(StopAsyncIteration):
             await gen.__anext__()
 
@@ -1122,13 +1122,13 @@ async def test_tick_status_skips_when_not_connected(
 
         async def unlock():
             for i in range(2):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.01)
                 async with shared_updater._condition:
                     shared_updater._condition.notify_all()
 
         gen = shared_updater.tick_status()
         asyncio.create_task(unlock())
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.01)
         await gen.__anext__()
 
     shared_updater._model_impl.get_status.assert_called_once()
