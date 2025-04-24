@@ -34,6 +34,7 @@ from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
     TerraformInitStep,
+    TerraformStateLockedException,
 )
 from sunbeam.feature_manager import FeatureManager
 from sunbeam.features.interface.v1.openstack import (
@@ -219,8 +220,8 @@ class ConfigureValidationStep(BaseStep):
                 tfvar_config=self.tfvar_config,
                 override_tfvars=override_tfvars,
             )
-        except TerraformException as e:
-            LOG.exception("Error configuring validation featureg.")
+        except (TerraformException, TerraformStateLockedException) as e:
+            LOG.exception("Error configuring validation feature.")
             return Result(ResultType.FAILED, str(e))
 
         return Result(ResultType.COMPLETED)

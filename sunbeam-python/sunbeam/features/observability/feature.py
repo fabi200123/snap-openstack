@@ -63,6 +63,7 @@ from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
     TerraformInitStep,
+    TerraformStateLockedException,
 )
 from sunbeam.features.interface.v1.base import (
     BaseFeatureGroup,
@@ -146,7 +147,7 @@ class DeployObservabilityStackStep(BaseStep, JujuStepHelper):
                 tfvar_config=self._CONFIG,
                 override_tfvars=extra_tfvars,
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             LOG.exception("Error deploying Observability Stack")
             return Result(ResultType.FAILED, str(e))
 
@@ -216,7 +217,7 @@ class UpdateObservabilityModelConfigStep(BaseStep, JujuStepHelper):
                 override_tfvars=extra_tfvars,
                 tf_apply_extra_args=["-target=juju_model.cos"],
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             LOG.exception("Error updating Observability Model config")
             return Result(ResultType.FAILED, str(e))
 
@@ -268,7 +269,7 @@ class DeployGrafanaAgentStep(BaseStep, JujuStepHelper):
                 tfvar_config=self._CONFIG,
                 override_tfvars=extra_tfvars,
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             LOG.exception("Error deploying grafana agent")
             return Result(ResultType.FAILED, str(e))
 

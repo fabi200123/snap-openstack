@@ -13,7 +13,7 @@ from sunbeam.core.steps import (
     DeployMachineApplicationStep,
     RemoveMachineUnitsStep,
 )
-from sunbeam.core.terraform import TerraformException
+from sunbeam.core.terraform import TerraformException, TerraformStateLockedException
 
 
 @pytest.fixture(autouse=True)
@@ -185,6 +185,29 @@ class TestDeployMachineApplicationStep:
         tfhelper.update_tfvars_and_apply_tf.assert_called_once()
         assert result.result_type == ResultType.FAILED
         assert result.message == "apply failed..."
+
+    def test_run_tf_apply_locked(
+        self, deployment, cclient, tfhelper, jhelper, manifest
+    ):
+        tfhelper.update_tfvars_and_apply_tf.side_effect = [
+            TerraformStateLockedException("apply failed..."),
+            None,
+        ]
+
+        step = DeployMachineApplicationStep(
+            deployment,
+            cclient,
+            tfhelper,
+            jhelper,
+            manifest,
+            "tfconfig",
+            "app1",
+            "model1",
+        )
+        result = step.run()
+
+        tfhelper.update_tfvars_and_apply_tf.assert_called()
+        assert result.result_type == ResultType.COMPLETED
 
     def test_run_waiting_timed_out(
         self, deployment, cclient, tfhelper, jhelper, manifest

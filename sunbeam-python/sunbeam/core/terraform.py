@@ -56,6 +56,18 @@ class TerraformException(Exception):
         return self.message
 
 
+class TerraformStateLockedException(Exception):
+    """Terraform Remote State Locked Exception."""
+
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+    def __str__(self) -> str:
+        """Stringify the exception."""
+        return self.message
+
+
 class TerraformHelper:
     """Helper for interaction with Terraform."""
 
@@ -207,7 +219,10 @@ class TerraformHelper:
         except subprocess.CalledProcessError as e:
             LOG.error(f"terraform apply failed: {e.output}")
             LOG.warning(e.stderr)
-            raise TerraformException(str(e))
+            if "remote state already locked" in e.stderr:
+                raise TerraformStateLockedException(str(e))
+            else:
+                raise TerraformException(str(e))
 
     def destroy(self):
         """Terraform destroy."""

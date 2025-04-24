@@ -28,6 +28,7 @@ from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
     TerraformInitStep,
+    TerraformStateLockedException,
 )
 from sunbeam.features.interface.v1.base import EnableDisableFeature
 from sunbeam.utils import (
@@ -91,7 +92,7 @@ class EnableUbuntuProApplicationStep(BaseStep, JujuStepHelper):
                 tfvar_config=None,
                 override_tfvars=extra_tfvars,
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             return Result(ResultType.FAILED, str(e))
 
         # Note(gboutry): application is in state unknown when it's deployed

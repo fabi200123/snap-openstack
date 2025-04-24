@@ -40,6 +40,7 @@ from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
     TerraformInitStep,
+    TerraformStateLockedException,
 )
 from sunbeam.features.interface.v1.base import ConfigType, EnableDisableFeature
 from sunbeam.steps.openstack import (
@@ -411,8 +412,7 @@ class OpenStackControlPlaneFeature(EnableDisableFeature, typing.Generic[ConfigTy
         # care during control plane refresh
         if (
             not upgrade_release
-            or self.tf_plan_location  # noqa W503
-            == TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO  # noqa: W503
+            or self.tf_plan_location == TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
         ):
             LOG.debug(
                 f"Ignore upgrade_hook for feature {self.name}, the corresponding apps"
@@ -569,7 +569,7 @@ class EnableOpenStackApplicationStep(
                 tfvar_config=config_key,
                 override_tfvars=extra_tfvars,
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             return Result(ResultType.FAILED, str(e))
 
         apps = self.feature.set_application_names(self.deployment)
@@ -668,7 +668,7 @@ class DisableOpenStackApplicationStep(
                     tfvar_config=config_key,
                     override_tfvars=extra_tfvars,
                 )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             return Result(ResultType.FAILED, str(e))
 
         apps = self.feature.set_application_names(self.deployment)

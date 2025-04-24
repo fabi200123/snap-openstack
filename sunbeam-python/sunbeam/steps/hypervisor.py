@@ -6,6 +6,7 @@ import logging
 import traceback
 import typing
 
+import tenacity
 from rich.status import Status
 
 from sunbeam.clusterd.client import Client
@@ -14,7 +15,14 @@ from sunbeam.clusterd.service import (
     NodeNotExistInClusterException,
 )
 from sunbeam.commands.configure import get_external_network_configs
-from sunbeam.core.common import BaseStep, Result, ResultType, read_config, update_config
+from sunbeam.core.common import (
+    BaseStep,
+    Result,
+    ResultType,
+    convert_retry_failure_as_result,
+    read_config,
+    update_config,
+)
 from sunbeam.core.deployment import Deployment, Networks
 from sunbeam.core.juju import (
     ActionFailedException,
@@ -32,7 +40,11 @@ from sunbeam.core.steps import (
     DeployMachineApplicationStep,
     DestroyMachineApplicationStep,
 )
-from sunbeam.core.terraform import TerraformException, TerraformHelper
+from sunbeam.core.terraform import (
+    TerraformException,
+    TerraformHelper,
+    TerraformStateLockedException,
+)
 from sunbeam.lazy import LazyImport
 
 if typing.TYPE_CHECKING:
@@ -396,6 +408,12 @@ class ReapplyHypervisorTerraformPlanStep(BaseStep):
 
         return Result(ResultType.SKIPPED)
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(60),
+        stop=tenacity.stop_after_delay(300),
+        retry=tenacity.retry_if_exception_type(TerraformStateLockedException),
+        retry_error_callback=convert_retry_failure_as_result,
+    )
     def run(self, status: Status | None = None) -> Result:
         """Apply terraform configuration to deploy hypervisor."""
         # Apply Network configs everytime reapply is called
