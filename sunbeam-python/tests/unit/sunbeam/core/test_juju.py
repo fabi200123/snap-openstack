@@ -1222,3 +1222,45 @@ async def test_reconnect_model_and_notify_awaiters_silences_unknown_exceptions()
         await shared_updater.reconnect_model_and_notify_awaiters()
     jhelper.reconnect.assert_not_called()
     shared_updater._condition.notify_all.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_model_success(jhelper: juju.JujuHelper, model):
+    result = await jhelper.get_model("control-plane")
+    assert result == model
+    jhelper.controller.get_model.assert_called_with("control-plane")
+
+
+@pytest.mark.asyncio
+async def test_get_model_not_found(jhelper: juju.JujuHelper):
+    jhelper.controller.get_model.side_effect = Exception("HTTP 404")
+    with pytest.raises(juju.ModelNotFoundException, match="Model 'missing' not found"):
+        await jhelper.get_model("missing")
+
+
+@pytest.mark.asyncio
+async def test_get_model_connection_closed_error(jhelper: juju.JujuHelper):
+    jhelper.reconnect = AsyncMock()
+    jhelper.controller.get_model.side_effect = ConnectionClosedError(None, None)
+    with pytest.raises(juju.JujuException, match="Failed to get model 'control-plane'"):
+        await jhelper.get_model("control-plane")
+
+
+@pytest.mark.asyncio
+async def test_get_model_retry_on_connection_error(mocker, jhelper: juju.JujuHelper):
+    jhelper.reconnect = AsyncMock()
+    jhelper.controller.get_model.side_effect = [
+        ConnectionClosedError(None, None),
+        AsyncMock(),
+    ]
+    result = await jhelper.get_model("control-plane")
+    assert result is not None
+    assert jhelper.controller.get_model.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_model_retry_exceeded(jhelper: juju.JujuHelper):
+    jhelper.reconnect = AsyncMock()
+    jhelper.controller.get_model.side_effect = ConnectionClosedError(None, None)
+    with pytest.raises(juju.JujuException, match="Failed to get model 'control-plane'"):
+        await jhelper.get_model("control-plane")

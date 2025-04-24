@@ -24,6 +24,7 @@ from typing import (
 )
 
 import pydantic
+import tenacity
 import yaml
 from packaging import version
 from snaphelpers import Snap
@@ -394,14 +395,36 @@ class JujuHelper:
 
         :model: Name of the model
         """
+        attempts = 3
+
+        @tenacity.retry(
+            stop=tenacity.stop_after_attempt(attempts),
+            wait=tenacity.wait_fixed(5),
+            retry=tenacity.retry_if_exception_type(tenacity.TryAgain),
+            reraise=True,
+        )
+        async def _get_model() -> "Model":
+            try:
+                model_impl = await self.controller.get_model(model)
+                self.model_connectors.append(model_impl)
+                return model_impl
+            except ConnectionClosedError:
+                LOG.debug("Connection to model %r lost, reconnecting.", model)
+                await self.reconnect()
+                raise tenacity.TryAgain(
+                    "Reconnected to controller, trying to get model again"
+                )
+            except Exception as e:
+                if "HTTP 400" in str(e) or "HTTP 404" in str(e):
+                    raise ModelNotFoundException(f"Model {model!r} not found")
+                raise e
+
         try:
-            model_impl = await self.controller.get_model(model)
-            self.model_connectors.append(model_impl)
-            return model_impl
-        except Exception as e:
-            if "HTTP 400" in str(e) or "HTTP 404" in str(e):
-                raise ModelNotFoundException(f"Model {model!r} not found")
-            raise e
+            return await _get_model()
+        except tenacity.TryAgain:
+            raise JujuException(
+                f"Failed to get model {model!r} after {attempts} attempts"
+            )
 
     @contextlib.asynccontextmanager
     async def get_model_closing(self, model: str) -> AsyncGenerator["Model", None]:

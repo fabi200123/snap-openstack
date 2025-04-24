@@ -73,3 +73,11 @@ def environ():
 def copytree():
     with patch("shutil.copytree") as p:
         yield p
+
+
+@pytest.fixture(autouse=True)
+def tenacity_patch(mocker):
+    import tenacity
+
+    mocker.patch("tenacity.wait_fixed", return_value=tenacity.wait_fixed(0))
+    return tenacity
