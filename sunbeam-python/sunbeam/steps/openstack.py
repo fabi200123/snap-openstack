@@ -7,6 +7,7 @@ import logging
 import math
 import typing
 
+import tenacity
 from rich.console import Console
 from rich.status import Status
 
@@ -19,6 +20,7 @@ from sunbeam.core.common import (
     Result,
     ResultType,
     convert_proxy_to_model_configs,
+    convert_retry_failure_as_result,
     get_host_total_cores,
     get_host_total_ram,
     read_config,
@@ -47,7 +49,11 @@ from sunbeam.core.steps import (
     PatchLoadBalancerServicesIPPoolStep,
     PatchLoadBalancerServicesIPStep,
 )
-from sunbeam.core.terraform import TerraformException, TerraformHelper
+from sunbeam.core.terraform import (
+    TerraformException,
+    TerraformHelper,
+    TerraformStateLockedException,
+)
 
 LOG = logging.getLogger(__name__)
 OPENSTACK_DEPLOY_TIMEOUT = 3600  # 60 minutes
@@ -499,6 +505,12 @@ class DeployControlPlaneStep(BaseStep, JujuStepHelper):
 
         return Result(ResultType.COMPLETED)
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(60),
+        stop=tenacity.stop_after_delay(300),
+        retry=tenacity.retry_if_exception_type(TerraformStateLockedException),
+        retry_error_callback=convert_retry_failure_as_result,
+    )
     def run(self, status: Status | None = None) -> Result:
         """Execute configuration using terraform."""
         # TODO(jamespage):

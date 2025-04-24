@@ -27,6 +27,7 @@ from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
     TerraformInitStep,
+    TerraformStateLockedException,
 )
 from sunbeam.features.interface.v1.base import FeatureRequirement
 from sunbeam.features.interface.v1.openstack import (
@@ -101,7 +102,7 @@ class CaasConfigureStep(BaseStep):
             self.tfhelper.update_tfvars_and_apply_tf(
                 self.client, self.manifest, override_tfvars=override_tfvars
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             LOG.exception("Error configuring Container as a Service feature.")
             return Result(ResultType.FAILED, str(e))
 

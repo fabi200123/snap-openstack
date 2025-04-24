@@ -36,6 +36,7 @@ from sunbeam.core.manifest import (
 from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
+    TerraformStateLockedException,
 )
 from sunbeam.features.interface.v1.openstack import (
     APPLICATION_DEPLOY_TIMEOUT,
@@ -179,7 +180,7 @@ class DeployConsulClientStep(BaseStep):
                 tfvar_config=self._CONFIG,
                 override_tfvars=extra_tfvars,
             )
-        except TerraformException as e:
+        except (TerraformException, TerraformStateLockedException) as e:
             LOG.exception("Error deploying consul client")
             return Result(ResultType.FAILED, str(e))
 

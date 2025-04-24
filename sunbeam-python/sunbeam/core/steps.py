@@ -17,6 +17,7 @@ from sunbeam.core.common import (
     BaseStep,
     Result,
     ResultType,
+    convert_retry_failure_as_result,
     read_config,
     update_config,
     update_status_background,
@@ -32,7 +33,11 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.k8s import K8SHelper
 from sunbeam.core.manifest import Manifest
-from sunbeam.core.terraform import TerraformException, TerraformHelper
+from sunbeam.core.terraform import (
+    TerraformException,
+    TerraformHelper,
+    TerraformStateLockedException,
+)
 from sunbeam.lazy import LazyImport
 
 if typing.TYPE_CHECKING:
@@ -122,6 +127,12 @@ class DeployMachineApplicationStep(BaseStep):
         """Accepted status to pass wait_application_ready function."""
         return ["active", "unknown"]
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(60),
+        stop=tenacity.stop_after_delay(300),
+        retry=tenacity.retry_if_exception_type(TerraformStateLockedException),
+        retry_error_callback=convert_retry_failure_as_result,
+    )
     def run(self, status: Status | None = None) -> Result:
         """Apply terraform configuration to deploy sunbeam machine."""
         machine_ids: list[int] = []
@@ -491,6 +502,12 @@ class DestroyMachineApplicationStep(BaseStep):
 
         return Result(ResultType.COMPLETED)
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(60),
+        stop=tenacity.stop_after_delay(300),
+        retry=tenacity.retry_if_exception_type(TerraformStateLockedException),
+        retry_error_callback=convert_retry_failure_as_result,
+    )
     def run(self, status: Status | None = None) -> Result:
         """Destroy machine application using Terraform."""
         if self._has_tf_resources:

@@ -16,6 +16,7 @@ from click import decorators
 from rich.console import Console
 from rich.status import Status
 from snaphelpers import Snap, UnknownConfigKey
+from tenacity import RetryCallState
 
 from sunbeam.clusterd.client import Client
 
@@ -543,3 +544,10 @@ def validate_ip_range(ip_range: str):
         ipaddress.ip_address(ips[1])
     else:
         raise ValueError("Invalid IP range, must be in the form of 'ip-ip'")
+
+
+def convert_retry_failure_as_result(retry_state: RetryCallState) -> Result:
+    if retry_state.outcome is not None:
+        return Result(ResultType.FAILED, str(retry_state.outcome.exception()))
+    else:
+        return Result(ResultType.FAILED)
