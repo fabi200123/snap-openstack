@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import tenacity
 
 from sunbeam.clusterd.service import ConfigItemNotFoundException
 from sunbeam.core.common import ResultType
@@ -525,6 +526,9 @@ class PatchLoadBalancerServicesIPPoolStepTest(unittest.TestCase):
         ):
             step = OpenStackPatchLoadBalancerServicesIPPoolStep(
                 self.client, self.pool_name
+            )
+            step._wait_for_ip_allocated_from_pool_annotation_update.retry.wait = (
+                tenacity.wait_none()
             )
             result = step.run()
         assert result.result_type == ResultType.COMPLETED
