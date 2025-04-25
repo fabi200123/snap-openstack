@@ -275,7 +275,11 @@ def get_k8s_plans(
                 deployment, client, jhelper, deployment.openstack_machines_model
             ),
             EnsureK8SUnitsTaggedStep(
-                deployment, client, jhelper, deployment.openstack_machines_model
+                deployment,
+                client,
+                jhelper,
+                deployment.openstack_machines_model,
+                fqdn,
             ),
             EnsureL2AdvertisementByHostStep(
                 deployment,
@@ -1094,7 +1098,11 @@ def join(
         )
         plan4.append(
             EnsureK8SUnitsTaggedStep(
-                deployment, client, jhelper, deployment.openstack_machines_model
+                deployment,
+                client,
+                jhelper,
+                deployment.openstack_machines_model,
+                name,
             )
         )
         plan4.append(EnsureDefaultL2AdvertisementMutedStep(deployment, client, jhelper))

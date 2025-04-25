@@ -800,6 +800,16 @@ class TestEnsureK8SUnitsTaggedStep(unittest.TestCase):
             result = self.step.is_skip()
         assert result.result_type == ResultType.FAILED
 
+    def test_is_skip_machine_not_control_role(self):
+        self.step.fqdn = "node1"
+        self.client.cluster.get_node_info.return_value = {
+            "name": "node1",
+            "machineid": "1",
+            "role": "compute",
+        }
+        result = self.step.is_skip()
+        assert result.result_type == ResultType.FAILED
+
     def test_run_success(self):
         self.step.to_update = {"node1": "k8s-node1"}
         self.kube.apply = Mock()

@@ -294,7 +294,12 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
     """
 
     def __init__(
-        self, deployment: Deployment, client: Client, jhelper: JujuHelper, model: str
+        self,
+        deployment: Deployment,
+        client: Client,
+        jhelper: JujuHelper,
+        model: str,
+        fqdn: str | None = None,
     ):
         super().__init__(
             "Ensure K8S units tagged", "Ensuring K8S units are properly tagged"
@@ -303,6 +308,7 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
         self.client = client
         self.jhelper = jhelper
         self.model = model
+        self.fqdn = fqdn
         self.to_update: dict[str, str] = {}
 
     def _get_management_ips(self, juju_machine: dict) -> list[str]:
@@ -391,9 +397,14 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
         :return: ResultType.SKIPPED if the Step should be skipped,
                 ResultType.COMPLETED or ResultType.FAILED otherwise
         """
-        control_nodes = self.client.cluster.list_nodes_by_role(
-            Role.CONTROL.name.lower()
-        )
+        control = Role.CONTROL.name.lower()
+        if self.fqdn:
+            node = self.client.cluster.get_node_info(self.fqdn)
+            if control not in node.get("role", []):
+                return Result(ResultType.FAILED, f"{self.fqdn} is not a control node")
+            control_nodes = [node]
+        else:
+            control_nodes = self.client.cluster.list_nodes_by_role(control)
         try:
             self.kube = _get_kube_client(
                 self.client,
