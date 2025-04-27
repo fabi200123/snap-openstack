@@ -288,6 +288,7 @@ def get_k8s_plans(
                 deployment.openstack_machines_model,
                 Networks.MANAGEMENT,
                 deployment.internal_ip_pool,
+                fqdn,
             ),
             EnsureDefaultL2AdvertisementMutedStep(deployment, client, jhelper),
         ]
@@ -1114,6 +1115,7 @@ def join(
                 deployment.openstack_machines_model,
                 Networks.MANAGEMENT,
                 deployment.internal_ip_pool,
+                name,
             ),
         )
         plan4.append(AddK8SCredentialStep(deployment, jhelper))

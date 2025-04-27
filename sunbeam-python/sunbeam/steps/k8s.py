@@ -1170,6 +1170,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
         model: str,
         network: Networks,
         pool: str,
+        fqdn: str | None = None,
     ):
         super().__init__("Ensure L2 advertisement", "Ensuring L2 advertisement")
         self.deployment = deployment
@@ -1178,6 +1179,7 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
         self.model = model
         self.network = network
         self.pool = pool
+        self.fqdn = fqdn
         self.l2_advertisement_resource = (
             K8SHelper.get_lightkube_l2_advertisement_resource()
         )
@@ -1299,9 +1301,14 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
         :return: ResultType.SKIPPED if the Step should be skipped,
                  ResultType.COMPLETED or ResultType.FAILED otherwise
         """
-        self.control_nodes = self.client.cluster.list_nodes_by_role(
-            Role.CONTROL.name.lower()
-        )
+        control = Role.CONTROL.name.lower()
+        if self.fqdn:
+            node = self.client.cluster.get_node_info(self.fqdn)
+            if control not in node.get("role", []):
+                return Result(ResultType.FAILED, f"{self.fqdn} is not a control node")
+            self.control_nodes = [node]
+        else:
+            self.control_nodes = self.client.cluster.list_nodes_by_role(control)
 
         try:
             self.kube = _get_kube_client(
