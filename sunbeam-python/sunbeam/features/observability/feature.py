@@ -574,7 +574,6 @@ class ObservabilityFeature(OpenStackControlPlaneFeature):
         self.tfplan_grafana_agent_dir = "deploy-grafana-agent"
         self.tfplan_grafana_agent_k8s_dir = "deploy-grafana-agent-k8s"
 
-        self.external = False
         self.prometheus_offer_url = ""
         self.grafana_offer_url = ""
         self.loki_offer_url = ""
@@ -678,22 +677,8 @@ class ObservabilityFeature(OpenStackControlPlaneFeature):
         return ["grafana-agent"]
 
     def get_cos_offer_urls(self, deployment: Deployment) -> dict:
-        """Return COS offer URLs."""
-        if not self.external:
-            tfhelper_cos = deployment.get_tfhelper(self.tfplan_cos)
-            output = tfhelper_cos.output()
-            return {
-                "grafana-dashboard-offer-url": output["grafana-dashboard-offer-url"],
-                "logging-offer-url": output["loki-logging-offer-url"],
-                "receive-remote-write-offer-url": output[
-                    "prometheus-receive-remote-write-offer-url"
-                ],
-            }
-
-        # Returning empty dict as integrations are not handled in terraform plan
-        # https://github.com/juju/terraform-provider-juju/issues/119
-        # Should return URLs from user input when above bug is fixed
-        return {}
+        """Get COS offer URLs."""
+        raise NotImplementedError
 
     def set_tfvars_on_enable(
         self, deployment: Deployment, config: FeatureConfig
@@ -722,7 +707,7 @@ class ObservabilityFeature(OpenStackControlPlaneFeature):
 
     def get_provider_type(self) -> ProviderType:
         """Return provide type external or embedded."""
-        return ProviderType.EXTERNAL if self.external else ProviderType.EMBEDDED
+        raise NotImplementedError
 
     def get_provider_type_from_cluster(self, deployment: Deployment) -> str | None:
         """Return provider type from database.
@@ -965,6 +950,22 @@ class EmbeddedObservabilityFeature(ObservabilityFeature):
             ],
         }
 
+    def get_provider_type(self) -> ProviderType:
+        """Return provide type external or embedded."""
+        return ProviderType.EMBEDDED
+
+    def get_cos_offer_urls(self, deployment: Deployment) -> dict:
+        """Return COS offer URLs."""
+        tfhelper_cos = deployment.get_tfhelper(self.tfplan_cos)
+        output = tfhelper_cos.output()
+        return {
+            "grafana-dashboard-offer-url": output["grafana-dashboard-offer-url"],
+            "logging-offer-url": output["loki-logging-offer-url"],
+            "receive-remote-write-offer-url": output[
+                "prometheus-receive-remote-write-offer-url"
+            ],
+        }
+
 
 class ExternalObservabilityFeature(ObservabilityFeature):
     name = "observability.external"
@@ -1084,7 +1085,6 @@ class ExternalObservabilityFeature(ObservabilityFeature):
         show_hints: bool,
     ) -> None:
         """Connect to external Observability stack."""
-        self.external = True
         self.prometheus_offer_url = (
             f"{controller}:{prometheus_receive_remote_write_offer_url}"
         )
@@ -1106,3 +1106,14 @@ class ExternalObservabilityFeature(ObservabilityFeature):
     def disable_cmd(self, deployment: Deployment, show_hints: bool) -> None:
         """Disable Observability stack."""
         self.disable_feature(deployment, show_hints)
+
+    def get_provider_type(self) -> ProviderType:
+        """Return provide type external or embedded."""
+        return ProviderType.EXTERNAL
+
+    def get_cos_offer_urls(self, deployment: Deployment) -> dict:
+        """Return COS offer URLs."""
+        # Returning empty dict as integrations are not handled in terraform plan
+        # https://github.com/juju/terraform-provider-juju/issues/119
+        # Should return URLs from user input when above bug is fixed
+        return {}
