@@ -417,9 +417,12 @@ class ValidationFeature(OpenStackControlPlaneFeature):
     def _configure_preflight_check(self, deployment: Deployment) -> bool:
         """Preflight check for configure command."""
         enabled_features = FeatureManager().enabled_features(deployment)
-        if "observability" not in enabled_features:
-            return False
-        return True
+        for feature in enabled_features:
+            if (
+                group := getattr(feature, "group", None)
+            ) and group.name == "observability":
+                return True
+        return False
 
     @click.command()
     @click_option_show_hints

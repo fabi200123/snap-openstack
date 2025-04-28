@@ -81,7 +81,7 @@ class FeatureManager:
         """Return a list of feature classes."""
         return list(all_features().values())
 
-    def enabled_features(self, deployment: Deployment) -> list:
+    def enabled_features(self, deployment: Deployment) -> list[EnableDisableFeature]:
         """Returns feature names that are enabled.
 
         :param deployment: Deployment instance.
@@ -92,9 +92,9 @@ class FeatureManager:
             if isinstance(feature, EnableDisableFeature) and feature.is_enabled(
                 deployment.get_client()
             ):
-                enabled_features.append(name)
+                enabled_features.append(feature)
 
-        LOG.debug(f"Enabled features: {enabled_features}")
+        LOG.debug("Enabled features: %s", ",".join(f.name for f in enabled_features))
         return enabled_features
 
     def get_all_feature_manifests(
