@@ -22,7 +22,6 @@ from sunbeam.core.common import (
     BaseStep,
     Result,
     ResultType,
-    RiskLevel,
     Status,
     infer_risk,
 )
@@ -394,12 +393,7 @@ class AddManifestStep(BaseStep):
             latest_manifest = self.client.cluster.get_latest_manifest()
         except ManifestItemNotFoundException:
             if self.manifest_content is None:
-                if risk == RiskLevel.STABLE:
-                    # only save risk manifest when not stable,
-                    # and no manifest was found in db
-                    return Result(ResultType.SKIPPED)
-                else:
-                    self.manifest_content = embedded_manifest
+                self.manifest_content = embedded_manifest
         except ClusterServiceUnavailableException as e:
             LOG.debug("Failed to fetch latest manifest from clusterd", exc_info=True)
             return Result(ResultType.FAILED, str(e))
