@@ -73,6 +73,6 @@ class DisableEnabledFeatures(BaseStep):
             except SunbeamException as e:
                 return Result(
                     ResultType.FAILED,
-                    f"Failed to disable feature {feature}: {e}",
+                    f"Failed to disable feature {feature.name}: {e}",
                 )
         return Result(ResultType.COMPLETED, "Features disabled")
