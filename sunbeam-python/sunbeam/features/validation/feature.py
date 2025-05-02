@@ -390,6 +390,17 @@ class ValidationFeature(OpenStackControlPlaneFeature):
             f"to {destination} ..."
         )
         with console.status(progress_message):
+            # Note: this is a workaround to cache the model in the juju client
+            try:
+                subprocess.run(
+                    ["juju", "show-model", model_name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True,
+                    timeout=30,
+                )
+            except subprocess.TimeoutExpired:
+                raise click.ClickException("Timed out while priming Juju model cache")
             # Note: this is a workaround to run command to payload container
             # since python-libjuju does not support such feature. See related
             # bug: https://github.com/juju/python-libjuju/issues/1029
