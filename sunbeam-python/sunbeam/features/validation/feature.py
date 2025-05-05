@@ -558,7 +558,10 @@ class ValidationFeature(OpenStackControlPlaneFeature):
             )
 
         if failed > 0 or unexpected_success > 0:
-            click.Abort()
+            raise click.ClickException(
+                f"Validation tests: failed {failed}, unexpected_success: "
+                f"{unexpected_success}"
+            )
 
     @click.command()
     def list_profiles(self) -> None:
