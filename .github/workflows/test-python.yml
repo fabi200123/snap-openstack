@@ -23,7 +23,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install dependencies
-        run: python3 -m pip install tox
+        run: |
+          python3 -m pip install tox
+          sudo snap install astral-uv --channel latest/stable --classic
       - name: Run linters
         working-directory: ./sunbeam-python
         run: tox -e mypy
@@ -35,7 +37,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install dependencies
-        run: python -m pip install tox
+        run: |
+          python -m pip install tox
+          sudo snap install astral-uv --channel latest/stable --classic
       - name: Run tests
         working-directory: ./sunbeam-python
         run: tox -e py3
