@@ -374,14 +374,16 @@ class ClusterUpdateNodeStep(BaseStep):
     ):
         super().__init__("Update node info", "Updating node info in cluster database")
         self.client = client
-        self.name = name
+        self.node_name = name
         self.role = role
         self.machine_id = machine_id
 
     def run(self, status: Status | None = None) -> Result:
         """Update Node info."""
         try:
-            self.client.cluster.update_node_info(self.name, self.role, self.machine_id)
+            self.client.cluster.update_node_info(
+                self.node_name, self.role, self.machine_id
+            )
             return Result(result_type=ResultType.COMPLETED)
         except ClusterServiceUnavailableException as e:
             LOG.debug(e)
