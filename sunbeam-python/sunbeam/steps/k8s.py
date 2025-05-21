@@ -282,6 +282,26 @@ class AddK8SUnitsStep(AddMachineUnitsStep):
         return K8S_UNIT_TIMEOUT
 
 
+def _get_machines_space_ips(
+    interfaces: dict[str, dict],
+    space: str,
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network],
+) -> list[str]:
+    ips = []
+    for iface in interfaces.values():
+        if (spaces := iface.get("space")) and space in spaces.split():
+            for ip in iface.get("ip-addresses", []):
+                try:
+                    ip_parsed = ipaddress.ip_address(ip)
+                except ValueError:
+                    LOG.debug("Invalid IP address %s", ip)
+                    continue
+                for network in networks:
+                    if ip_parsed in network:
+                        ips.append(ip)
+    return ips
+
+
 class EnsureK8SUnitsTaggedStep(BaseStep):
     """Ensure K8S units get properly tagged.
 
@@ -312,12 +332,15 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
         self.to_update: dict[str, str] = {}
 
     def _get_management_ips(self, juju_machine: dict) -> list[str]:
-        management_ips = []
         management_space = self.deployment.get_space(Networks.MANAGEMENT)
-        for iface in juju_machine["network-interfaces"].values():
-            if iface.get("space") == management_space:
-                management_ips.extend(iface.get("ip-addresses", []))
-        return management_ips
+        management_networks = run_sync(
+            self.jhelper.get_space_networks(self.model, management_space)
+        )
+        return _get_machines_space_ips(
+            juju_machine["network-interfaces"],
+            management_space,
+            management_networks,
+        )
 
     def _find_matching_k8s_node(
         self,
@@ -744,9 +767,14 @@ class StoreK8SKubeConfigStep(BaseStep, JujuStepHelper):
             self.jhelper.get_machine_interfaces(self.model, machine_id)
         )
         LOG.debug("Machine %r interfaces: %r", machine_id, machine_interfaces)
-        for ifname, iface in machine_interfaces.items():
-            if iface.get("space") == self.deployment.get_space(Networks.MANAGEMENT):
-                return iface["ip-addresses"][0] + ":6443"
+        management_space = self.deployment.get_space(Networks.MANAGEMENT)
+        management_networks = run_sync(
+            self.jhelper.get_space_networks(self.model, management_space)
+        )
+        for ip in _get_machines_space_ips(
+            machine_interfaces, management_space, management_networks
+        ):
+            return ip + ":6443"
         return None
 
 
@@ -1287,8 +1315,9 @@ class EnsureL2AdvertisementByHostStep(BaseStep):
             self.jhelper.get_machine_interfaces(self.model, machine_id)
         )
         LOG.debug("Machine %r interfaces: %r", machine_id, machine_interfaces)
+        network_space = self.deployment.get_space(network)
         for ifname, iface in machine_interfaces.items():
-            if iface.get("space") == self.deployment.get_space(network):
+            if (spaces := iface.get("space")) and network_space in spaces.split():
                 self._ifnames[name] = ifname
                 return ifname
         raise self._L2AdvertisementError(

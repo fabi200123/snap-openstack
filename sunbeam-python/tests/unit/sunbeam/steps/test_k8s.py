@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
+import ipaddress
 import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -31,6 +32,7 @@ from sunbeam.steps.k8s import (
     KubeClientError,
     StoreK8SKubeConfigStep,
     _get_kube_client,
+    _get_machines_space_ips,
 )
 
 
@@ -698,6 +700,9 @@ class TestEnsureK8SUnitsTaggedStep(unittest.TestCase):
         self.deployment.get_space.return_value = "management"
         self.client = Mock()
         self.jhelper = AsyncMock()
+        self.jhelper.get_space_networks.return_value = [
+            ipaddress.ip_network("10.0.0.0/8")
+        ]
         self.model = "test-model"
         self.step = EnsureK8SUnitsTaggedStep(
             self.deployment, self.client, self.jhelper, self.model
@@ -910,3 +915,54 @@ class TestGetKubeClient(unittest.TestCase):
             trust_env=False,
         )
         assert "Error creating k8s client" in str(context.exception)
+
+
+_get_machines_space_ips_tests_cases = {
+    "match_ip_in_space_and_network": (
+        {
+            "eth0": {"space": "mgmt", "ip-addresses": ["10.0.0.5", "192.168.1.2"]},
+            "eth1": {"space": "data", "ip-addresses": ["172.16.0.1"]},
+        },
+        "mgmt",
+        [ipaddress.ip_network("10.0.0.0/24"), ipaddress.ip_network("192.168.1.0/24")],
+        {"10.0.0.5", "192.168.1.2"},
+    ),
+    "no_matching_space": (
+        {"eth0": {"space": "data", "ip-addresses": ["10.0.0.5"]}},
+        "mgmt",
+        [ipaddress.ip_network("10.0.0.0/24")],
+        set(),
+    ),
+    "no_matching_network": (
+        {"eth0": {"space": "mgmt", "ip-addresses": ["172.16.0.1"]}},
+        "mgmt",
+        [ipaddress.ip_network("10.0.0.0/24")],
+        set(),
+    ),
+    "invalid_ip_address": (
+        {"eth0": {"space": "mgmt", "ip-addresses": ["not-an-ip", "10.0.0.5"]}},
+        "mgmt",
+        [ipaddress.ip_network("10.0.0.0/24")],
+        {"10.0.0.5"},
+    ),
+    "multiple_interfaces_and_networks": (
+        {
+            "eth0": {"space": "mgmt", "ip-addresses": ["10.0.0.5", "192.168.1.2"]},
+            "eth1": {"space": "mgmt", "ip-addresses": ["172.16.0.1", "10.0.0.6"]},
+            "eth2": {"space": "data", "ip-addresses": ["10.1.0.1"]},
+        },
+        "mgmt",
+        [ipaddress.ip_network("10.0.0.0/24"), ipaddress.ip_network("172.16.0.0/16")],
+        {"10.0.0.5", "10.0.0.6", "172.16.0.1"},
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "interfaces,space,networks,expected",
+    _get_machines_space_ips_tests_cases.values(),
+    ids=_get_machines_space_ips_tests_cases.keys(),
+)
+def test_get_machines_space_ips(interfaces, space, networks, expected):
+    result = set(_get_machines_space_ips(interfaces, space, networks))
+    assert result == expected

@@ -5,6 +5,7 @@ import asyncio
 import asyncio.queues
 import base64
 import contextlib
+import ipaddress
 import json
 import logging
 import os
@@ -1618,6 +1619,26 @@ class JujuHelper:
                 await facade.MergeBindings(request)
             except juju_errors.JujuError as e:
                 raise JujuException(f"Failed to merge bindings: {str(e)}") from e
+
+    async def get_space_networks(
+        self, model: str, space: str
+    ) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+        """Get networks in a space."""
+        networks = []
+        async with self.get_model_closing(model) as model_impl:
+            spaces = await model_impl.get_spaces()
+            for s in spaces:
+                if s.name != space:
+                    continue
+                for network in s.subnets:
+                    try:
+                        networks.append(ipaddress.ip_network(network.cidr))
+                    except ValueError as e:
+                        raise JujuException(
+                            f"Invalid network {network!r} in space {space!r}: {str(e)}"
+                        ) from e
+                return networks
+            raise JujuException(f"Space {space!r} not found in model {model!r}")
 
 
 class JujuStepHelper:
