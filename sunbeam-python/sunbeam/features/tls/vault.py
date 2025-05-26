@@ -40,6 +40,7 @@ from sunbeam.core.manifest import (
     FeatureConfig,
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
+from sunbeam.feature_manager import FeatureManager
 from sunbeam.features.interface.utils import (
     encode_base64_as_string,
     get_subject_from_csr,
@@ -328,12 +329,18 @@ class VaultTlsFeature(TlsFeature):
         show_hints: bool,
     ):
         """Enable Vault CA feature."""
-        self.enable_feature(
-            deployment,
-            VaultTlsFeatureConfig(ca=ca, ca_chain=ca_chain,
-                                  endpoints=endpoints),
-            show_hints,
-        )
+        if not self._check_vault_enabled(deployment):
+            raise click.ClickException(
+                "'vault' feature is required for configuring"
+                "tls vault feature."
+            )
+        else:
+            self.enable_feature(
+                deployment,
+                VaultTlsFeatureConfig(ca=ca, ca_chain=ca_chain,
+                                      endpoints=endpoints),
+                show_hints,
+            )
 
     @click.command()
     @click_option_show_hints
@@ -515,3 +522,13 @@ class VaultTlsFeature(TlsFeature):
                 },
             ],
         }
+
+    def _check_vault_enabled(self, deployment: Deployment) -> bool:
+        """Preflight check for enabling Vault TLS."""
+        enabled_features = FeatureManager().enabled_features(deployment)
+        for feature in enabled_features:
+            if (
+                feature_name := getattr(feature, "name", None)
+            ) and feature_name.name == "vault":
+                return True
+        return False
