@@ -37,9 +37,7 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.manifest import (
     AddManifestStep,
-    CharmManifest,
     FeatureConfig,
-    SoftwareConfig,
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.features.interface.utils import (
@@ -59,7 +57,6 @@ from sunbeam.features.tls.common import (
     TlsFeatureConfig,
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
-from sunbeam.versions import VAULT_CHANNEL
 
 
 CERTIFICATE_FEATURE_KEY = "TlsProvider"
@@ -111,7 +108,8 @@ class ConfigureCAStep(BaseStep):
         ca_chain: str,
         deployment_preseed: dict | None = None,
     ):
-        super().__init__("Configure Vault CA certs", "Configuring Vault CA certificates")
+        super().__init__("Configure Vault CA certs",
+                         "Configuring Vault CA certificates")
         self.client = client
         self.jhelper = jhelper
         self.ca_cert = ca_cert
