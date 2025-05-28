@@ -54,6 +54,7 @@ from sunbeam.core.manifest import (
     SoftwareConfig,
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
+from sunbeam.core.questions import get_stdin_reopen_tty
 from sunbeam.core.terraform import TerraformInitStep
 from sunbeam.features.interface.v1.base import ConfigType
 from sunbeam.features.interface.v1.openstack import (
@@ -744,7 +745,7 @@ class VaultFeature(OpenStackControlPlaneFeature):
         Use `-` as unseal key to read from stdin.
         """
         if unseal_key == "-":
-            unseal_key = click.get_text_stream("stdin").readline().strip()
+            unseal_key = get_stdin_reopen_tty()
 
         jhelper = JujuHelper(deployment.get_connected_controller())
         plan = [VaultUnsealStep(jhelper, unseal_key)]
@@ -760,7 +761,7 @@ class VaultFeature(OpenStackControlPlaneFeature):
         Use "-" as root_token to read from stdin.
         """
         if root_token == "-":
-            root_token = click.get_text_stream("stdin").readline().strip()
+            root_token = get_stdin_reopen_tty()
 
         jhelper = JujuHelper(deployment.get_connected_controller())
         plan = [AuthorizeVaultCharmStep(jhelper, root_token)]

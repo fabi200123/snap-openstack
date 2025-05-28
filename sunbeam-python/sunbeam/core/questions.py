@@ -15,6 +15,7 @@ from rich.text import Text
 
 from sunbeam.clusterd.client import Client
 from sunbeam.clusterd.service import ConfigItemNotFoundException
+from sunbeam.core.common import SunbeamException
 
 LOG = logging.getLogger(__name__)
 PASSWORD_MASK = "*" * 8
@@ -58,6 +59,29 @@ class StreamWrapper:
 
 
 STREAM = StreamWrapper(sys.stdin, sys.stdout)
+
+
+def get_stdin_reopen_tty() -> str:
+    """Get stdin content and reopen tty if needed.
+
+    This function reads a single line from stdin and reopens the tty
+    if stdin is not a tty.
+    """
+    stdin_input = sys.stdin.readline().strip()
+
+    if not sys.stdin.isatty():
+        try:
+            sys.stdin.close()
+            sys.stdin = open("/dev/tty", "r")
+        except OSError as e:
+            LOG.debug("Failed to reopen stdin to /dev/tty: %s", e)
+            raise SunbeamException("Failed to open terminal for input") from e
+        # note(gboutry): Reassign stream wrapper read_stream
+        # to the new stdin.
+        STREAM.read_stream = sys.stdin
+        LOG.debug("Reopened stdin to /dev/tty")
+    return stdin_input
+
 
 T = typing.TypeVar("T")
 
