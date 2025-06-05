@@ -14,6 +14,8 @@ To enable the TLS Vault feature, you need an already bootstraped Sunbeam instanc
 sunbeam enable tls vault --ca=<Base64 encoded CA cert> --ca-chain=<Base64 encoded CA Chain>
 ```
 
+**NOTE**: The certificate needs to be created as a CA certificate. This can be done by adding to the certificate the `x509 Extension -> CA:TRUE`.
+
 By default the TLS Certificate charm integrates with public traefik instances.
 To integrate with internal traefik instances as well, install the feature with:
 

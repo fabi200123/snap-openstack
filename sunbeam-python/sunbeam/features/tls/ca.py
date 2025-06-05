@@ -57,6 +57,8 @@ from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
     TlsFeature,
     TlsFeatureConfig,
+    certificate_questions,
+    get_outstanding_certificate_requests,
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
@@ -72,28 +74,6 @@ class _Certificate(pydantic.BaseModel):
 
 class CaTlsFeatureConfig(TlsFeatureConfig):
     certificates: dict[str, _Certificate] = {}
-
-
-def certificate_questions(unit: str, subject: str):
-    return {
-        "certificate": questions.PromptQuestion(
-            f"Base64 encoded Certificate for {unit} CSR Unique ID: {subject}",
-        ),
-    }
-
-
-def get_outstanding_certificate_requests(
-    app: str, model: str, jhelper: JujuHelper
-) -> dict:
-    """Get outstanding certificate requests from manual-tls-certificate operator.
-
-    Returns the result from the action get-outstanding-certificate-requests
-    Raises LeaderNotFoundException, ActionFailedException.
-    """
-    action_cmd = "get-outstanding-certificate-requests"
-    unit = run_sync(jhelper.get_leader_unit(app, model))
-    action_result = run_sync(jhelper.run_action(unit, model, action_cmd))
-    return action_result
 
 
 class ConfigureCAStep(BaseStep):
