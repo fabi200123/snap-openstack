@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import logging
 from pathlib import Path
 
@@ -9,8 +10,12 @@ import yaml
 from packaging.version import Version
 from rich.console import Console
 from rich.status import Status
+from rich.table import Table
 
 from sunbeam.clusterd.client import Client
+from sunbeam.clusterd.service import (
+    ConfigItemNotFoundException,
+)
 from sunbeam.core import questions
 from sunbeam.core.common import (
     FORMAT_TABLE,
@@ -41,6 +46,11 @@ from sunbeam.features.interface.v1.openstack import (
     TerraformPlanLocation,
     WaitForApplicationsStep,
 )
+from sunbeam.features.tls.ca import (
+    CaTlsFeatureConfig,
+    CaTlsFeature,
+    ConfigureCAStep,
+)
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
     TlsFeature,
@@ -50,146 +60,26 @@ from sunbeam.features.tls.common import (
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
+CERTIFICATE_FEATURE_KEY = "TlsProvider"
+CA_APP_NAME = "manual-tls-certificates"
 LOG = logging.getLogger(__name__)
 console = Console()
 
-VAULT_APP = "vault"
-MANUAL_CA_CONFIG = "FeatureCACertificatesConfig"
 
-
-class VaultTlsFeatureConfig(TlsFeatureConfig):
-    ca: str
-    ca_chain: str
-    endpoints: list[str] = ["public"]
-
-
-class ConfigureVaultIntermediateCAStep(BaseStep):
-    _CONFIG = "FeatureVaultIntermediateConfig"
-
-    def __init__(
-        self,
-        client: Client,
-        jhelper: JujuHelper,
-        config: VaultTlsFeatureConfig,
-        deployment_preseed: dict | None = None,
-    ):
-        super().__init__(
-            "Configure Vault Intermediate CA",
-            "Configuring Vault as an intermediate Certificate Authority",
-        )
-        self.client = client
-        self.jhelper = jhelper
-        self.config = config
-        self.preseed = deployment_preseed or {}
-        self.cert = ""
-        self.chain = ""
-
-    def has_prompts(self) -> bool:
-        return True
-
-    def prompt(
-        self, console: Console | None = None, show_hint: bool = False
-    ) -> None:
-        try:
-            leader = run_sync(
-                self.jhelper.get_leader_unit(VAULT_APP, OPENSTACK_MODEL)
-            )
-        except LeaderNotFoundException as e:
-            raise click.ClickException(f"Unable to get Vault leader: {e}")
-
-        action = run_sync(
-            self.jhelper.run_action(leader, OPENSTACK_MODEL, "get-csr")
-        )
-        if action.get("return-code", 1) != 0:
-            raise click.ClickException("Failed to fetch intermediate CSR from Vault")
-
-        csr_pem = action.get("output") or action.get("results", {}).get("output")
-        if not csr_pem:
-            raise click.ClickException("No CSR returned from Vault")
-
-        console.print("[bold]Vault Intermediate CA CSR:[/]")
-        console.print(csr_pem)
-
-        variables = questions.load_answers(self.client, self._CONFIG)
-        variables.setdefault("certificate", "")
-        variables.setdefault("root_ca", "")
-
-        bank = questions.QuestionBank(
-            questions=certificate_questions("unit", "subject"),
-            console=console,
-            preseed=self.preseed,
-            previous_answers=variables,
-            show_hint=show_hint,
-        )
-        cert = bank.certificate.ask()
-        root = bank.root_ca.ask()
-
-        if not cert or not root:
-            raise click.ClickException("Invalid intermediate certificate or root CA chain")
-
-        self.cert = cert
-        self.chain = root
-
-        variables["certificate"] = cert
-        variables["root_ca"] = root
-        questions.write_answers(self.client, self._CONFIG, variables)
-
-    def is_skip(self, status: Status | None = None) -> Result:
-        return Result(ResultType.COMPLETED)
-
-    def run(self, status: Status | None = None) -> Result:
-        try:
-            leader = run_sync(
-                self.jhelper.get_leader_unit(VAULT_APP, OPENSTACK_MODEL)
-            )
-        except LeaderNotFoundException as e:
-            LOG.debug("Unable to get Vault leader")
-            return Result(ResultType.FAILED, str(e))
-
-        params = {"pem": self.cert, "root-ca": self.chain}
-        try:
-            action = run_sync(
-                self.jhelper.run_action(
-                    leader, OPENSTACK_MODEL, "upload-signed-csr", params
-                )
-            )
-        except ActionFailedException as e:
-            LOG.debug("upload-signed-csr action failed")
-            return Result(ResultType.FAILED, str(e))
-
-        if action.get("return-code", 1) != 0:
-            return Result(ResultType.FAILED, "upload-signed-csr failed")
-
-        try:
-            reissue = run_sync(
-                self.jhelper.run_action(
-                    leader, OPENSTACK_MODEL, "reissue-certificates"
-                )
-            )
-        except ActionFailedException as e:
-            LOG.debug("reissue-certificates action failed")
-            return Result(ResultType.FAILED, str(e))
-
-        if reissue.get("return-code", 1) != 0:
-            return Result(ResultType.FAILED, "reissue-certificates failed")
-
-        return Result(ResultType.COMPLETED)
-
-
-class VaultTlsFeature(TlsFeature):
-    version = Version("0.2.0")
+class VaultTlsFeature(CaTlsFeature):
+    version = Version("0.0.1")
+    
     name = "tls.vault"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:
         """Return the config type for the feature."""
-        return VaultTlsFeatureConfig
+        return CaTlsFeatureConfig
 
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
         return SoftwareConfig(
-            charms={"manual-tls-certificates": CharmManifest(
-                channel="latest/stable")}
+            charms={"manual-tls-certificates": CharmManifest(channel="latest/stable")}
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:
@@ -222,16 +112,65 @@ class VaultTlsFeature(TlsFeature):
         )
         return content
 
+
+    @click.command()
+    @click.option(
+        "--endpoint",
+        "endpoints",
+        multiple=True,
+        default=["public"],
+        type=click.Choice(["public", "internal", "rgw"], case_sensitive=False),
+        help="Specify endpoints to apply tls.",
+    )
+    @click.option(
+        "--ca-chain",
+        required=True,
+        type=str,
+        callback=validate_ca_chain,
+        help="Base64 encoded CA Chain certificate",
+    )
+    @click.option(
+        "--ca",
+        required=True,
+        type=str,
+        callback=validate_ca_certificate,
+        help="Base64 encoded CA certificate",
+    )
+    @click_option_show_hints
+    @pass_method_obj
+    def enable_cmd(
+        self,
+        deployment: Deployment,
+        ca: str,
+        ca_chain: str,
+        endpoints: list[str],
+        show_hints: bool,
+    ):
+        """Enable CA feature."""
+        self.enable_feature(
+            deployment,
+            CaTlsFeatureConfig(ca=ca, ca_chain=ca_chain, endpoints=endpoints),
+            show_hints,
+        )
+
+    @click.command()
+    @click_option_show_hints
+    @pass_method_obj
+    def disable_cmd(self, deployment: Deployment, show_hints: bool):
+        """Disable CA feature."""
+        self.disable_feature(deployment, show_hints)
+        console.print("CA feature disabled")
+
     def set_application_names(self, deployment: Deployment) -> list:
         """Application names handled by the terraform plan."""
-        return ["vault"]
+        return ["manual-tls-certificates"]
 
     def set_tfvars_on_enable(
-        self, deployment: Deployment, config: VaultTlsFeatureConfig
+        self, deployment: Deployment, config: CaTlsFeatureConfig
     ) -> dict:
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
-            "traefik-to-tls-provider": VAULT_APP,}
+            "traefik-to-tls-provider": CA_APP_NAME}
         if "public" in config.endpoints:
             tfvars.update({"enable-tls-for-public-endpoint": True})
         if "internal" in config.endpoints:
@@ -261,117 +200,131 @@ class VaultTlsFeature(TlsFeature):
         """Set terraform variables to resize the application."""
         return {}
 
-    def preseed_questions_content(self) -> list:
-        bank = questions.QuestionBank(
-            questions=certificate_questions("unit", "subject"),
-            console=console,
-            previous_answers={},
-        )
-        return questions.show_questions(
-            bank,
-            section="vault",
-            subsection="intermediate-ca",
-            section_description="Vault Intermediate CA Configuration",
-            comment_out=True,
-        )
-
     @click.group()
     def tls_group(self) -> None:
-        """Manage TLS features."""
+        """Manage TLS."""
 
     @click.group()
     def ca_group(self) -> None:
-        """Manage Vault as CA."""
-
-    @ca_group.command(name="enable")
-    @click.option(
-        "--endpoint",
-        "endpoints",
-        multiple=True,
-        default=["public"],
-        type=click.Choice(["public", "internal", "rgw"], case_sensitive=False),
-        help="Specify endpoints to secure with TLS.",
-    )
-    @click.option(
-        "--ca",
-        required=True,
-        type=str,
-        callback=validate_ca_certificate,
-        help="Base64 encoded Intermediate CA certificate",
-    )
-    @click.option(
-        "--ca-chain",
-        required=True,
-        type=str,
-        callback=validate_ca_chain,
-        help="Base64 encoded Root CA certificate(s) chain",
-    )
-    @click_option_show_hints
-    @pass_method_obj
-    def enable_cmd(
-        self,
-        deployment: Deployment,
-        ca: str,
-        ca_chain: str,
-        endpoints: list[str],
-        show_hints: bool,
-    ):
-        """Enable Vault as an intermediate CA."""
-        feature_manager = deployment.get_feature_manager()
-        enabled_features = feature_manager.enabled_features(deployment)
-        for feature in enabled_features:
-            if VAULT_APP != feature.name:
-                raise click.ClickException(
-                    "Vault must be enabled first (run `sunbeam enable vault`)."
-                )
-
-        jhelper = JujuHelper(deployment.get_connected_controller())
-        try:
-            leader = run_sync(jhelper.get_leader_unit(VAULT_APP, OPENSTACK_MODEL))
-            status = run_sync(
-                jhelper.run_action(leader, OPENSTACK_MODEL, "status")
-            )
-        except Exception as e:
-            raise click.ClickException(f"Unable to query Vault status: {e}")
-        sealed = status.get("results", {}).get("sealed")
-        if sealed in (True, "true", "True"):
-            raise click.ClickException(
-                "Vault is sealed; unseal before configuring intermediate CA."
-            )
-
-        try:
-            manual = read_config(deployment, MANUAL_CA_CONFIG)
-            if manual.get("ca") or manual.get("chain"):
-                raise click.ClickException(
-                    "Manual TLS CA feature already configured; disable it first."
-                )
-        except Exception:
-            pass
-
-        cfg = VaultTlsFeatureConfig(
-            ca=ca, ca_chain=ca_chain, endpoints=endpoints
-        )
-        # self.enable_feature(deployment, cfg, show_hints)
-
-    @ca_group.command(name="disable")
-    @click_option_show_hints
-    @pass_method_obj
-    def disable_cmd(self, deployment: Deployment, show_hints: bool):
-        """Disable Vault-based TLS feature."""
-        self.disable_feature(deployment, show_hints)
-        console.print("Vault TLS feature disabled")
+        """Manage CA."""
 
     @click.command()
-    def configure(self) -> None:
-        pass  # unchanged
+    @click.option(
+        "--format",
+        type=click.Choice([FORMAT_TABLE, FORMAT_YAML]),
+        default=FORMAT_TABLE,
+        help="Output format",
+    )
+    @pass_method_obj
+    def list_outstanding_csrs(self, deployment: Deployment, format: str) -> None:
+        """List outstanding CSRs."""
+        app = CA_APP_NAME
+        model = OPENSTACK_MODEL
+        action_cmd = "get-outstanding-certificate-requests"
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        try:
+            action_result = get_outstanding_certificate_requests(app, model, jhelper)
+        except LeaderNotFoundException as e:
+            LOG.debug(f"Unable to get {app} leader to print CSRs")
+            raise click.ClickException(str(e))
+        except ActionFailedException as e:
+            LOG.debug(f"Running action {action_cmd} failed")
+            raise click.ClickException(str(e))
+
+        LOG.debug(f"Result from action {action_cmd}: {action_result}")
+        if action_result.get("return-code", 0) > 1:
+            raise click.ClickException(
+                "Unable to get outstanding certificate requests from CA"
+            )
+
+        certs_to_process = json.loads(action_result.get("result", "[]"))
+        csrs = {
+            unit: csr
+            for record in certs_to_process
+            if (unit := record.get("unit_name")) and (csr := record.get("csr"))
+        }
+
+        if format == FORMAT_TABLE:
+            table = Table()
+            table.add_column("Unit name")
+            table.add_column("CSR")
+            for unit, csr in csrs.items():
+                table.add_row(unit, csr)
+            console.print(table)
+        elif format == FORMAT_YAML:
+            yaml.add_representer(str, str_presenter)
+            console.print(yaml.dump(csrs))
+
+    @click.command()
+    @click.option(
+        "-m",
+        "--manifest",
+        "manifest_path",
+        help="Manifest file.",
+        type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    )
+    @click_option_show_hints
+    @pass_method_obj
+    def configure(
+        self,
+        deployment: Deployment,
+        manifest_path: Path | None = None,
+        show_hints: bool = False,
+    ) -> None:
+        """Configure Unit certs."""
+        client = deployment.get_client()
+        manifest = deployment.get_manifest(manifest_path)
+        preseed = {}
+        if (ca := manifest.get_feature(self.name.split(".")[-1])) and ca.config:
+            preseed = ca.config.model_dump(by_alias=True)
+        model = OPENSTACK_MODEL
+        apps_to_monitor = ["traefik", "traefik-public", "keystone"]
+        if client.cluster.list_nodes_by_role("storage"):
+            apps_to_monitor.append("traefik-rgw")
+
+        try:
+            config = read_config(client, CERTIFICATE_FEATURE_KEY)
+        except ConfigItemNotFoundException:
+            config = {}
+        ca = config.get("ca")
+        ca_chain = config.get("chain")
+
+        if ca is None or ca_chain is None:
+            raise click.ClickException("CA and CA Chain not configured")
+
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        plan = [
+            AddManifestStep(client, manifest_path),
+            ConfigureCAStep(
+                client,
+                jhelper,
+                ca,
+                ca_chain,
+                deployment_preseed=preseed,
+            ),
+            # On ingress change, the keystone takes time to update the service
+            # endpoint, update the identity-service relation data on every
+            # related application.
+            WaitForApplicationsStep(
+                jhelper, apps_to_monitor, model, INGRESS_CHANGE_APPLICATION_TIMEOUT
+            ),
+        ]
+        run_plan(plan, console, show_hints)
+        click.echo("CA certs configured")
 
     def enabled_commands(self) -> dict[str, list[dict]]:
+        """Dict of clickgroup along with commands.
+
+        Return the commands available once the feature is enabled.
+        """
         return {
             "init": [{"name": self.group.name, "command": self.tls_group}],
             "init.tls": [{"name": "vault", "command": self.ca_group}],
             "init.tls.vault": [
-                {"name": "enable", "command": self.enable_cmd},
-                {"name": "disable", "command": self.disable_cmd},
-                {"name": "configure", "command": self.configure},
+                {"name": "unit_certs", "command": self.configure},
+                {
+                    "name": "list_outstanding_csrs",
+                    "command": self.list_outstanding_csrs,
+                },
             ],
         }
