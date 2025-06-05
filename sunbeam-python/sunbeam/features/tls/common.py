@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.status import Status
 
 from sunbeam.clusterd.service import ConfigItemNotFoundException
+from sunbeam.core import questions
 from sunbeam.core.common import (
     BaseStep,
     Result,
@@ -305,3 +306,26 @@ class RemoveCACertsFromKeystoneStep(BaseStep):
             )
 
         return Result(ResultType.COMPLETED)
+
+
+def certificate_questions(unit: str, subject: str):
+    return {
+        "certificate": questions.PromptQuestion(
+            f"Base64 encoded Certificate for {unit} CSR Unique ID: {subject}",
+        ),
+    }
+
+
+def get_outstanding_certificate_requests(
+    app: str, model: str, jhelper: JujuHelper
+) -> dict:
+    """Get outstanding certificate requests from manual-tls-certificate 
+    operator.
+
+    Returns the result from the action get-outstanding-certificate-requests
+    Raises LeaderNotFoundException, ActionFailedException.
+    """
+    action_cmd = "get-outstanding-certificate-requests"
+    unit = run_sync(jhelper.get_leader_unit(app, model))
+    action_result = run_sync(jhelper.run_action(unit, model, action_cmd))
+    return action_result

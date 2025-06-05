@@ -45,6 +45,8 @@ from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
     TlsFeature,
     TlsFeatureConfig,
+    certificate_questions,
+    get_outstanding_certificate_requests,
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
@@ -55,21 +57,10 @@ VAULT_APP = "vault"
 MANUAL_CA_CONFIG = "FeatureCACertificatesConfig"
 
 
-class VaultIntermediateTlsFeatureConfig(TlsFeatureConfig):
+class VaultTlsFeatureConfig(TlsFeatureConfig):
     ca: str
     ca_chain: str
     endpoints: list[str] = ["public"]
-
-
-def intermediate_ca_questions():
-    return {
-        "certificate": questions.PromptQuestion(
-            "Base64 encoded Intermediate CA certificate (signed CSR)",
-        ),
-        "root_ca": questions.PromptQuestion(
-            "Base64 encoded Root CA certificate(s) chain",
-        ),
-    }
 
 
 class ConfigureVaultIntermediateCAStep(BaseStep):
@@ -79,7 +70,7 @@ class ConfigureVaultIntermediateCAStep(BaseStep):
         self,
         client: Client,
         jhelper: JujuHelper,
-        config: VaultIntermediateTlsFeatureConfig,
+        config: VaultTlsFeatureConfig,
         deployment_preseed: dict | None = None,
     ):
         super().__init__(
@@ -124,7 +115,7 @@ class ConfigureVaultIntermediateCAStep(BaseStep):
         variables.setdefault("root_ca", "")
 
         bank = questions.QuestionBank(
-            questions=intermediate_ca_questions(),
+            questions=certificate_questions("unit", "subject"),
             console=console,
             preseed=self.preseed,
             previous_answers=variables,
@@ -191,20 +182,52 @@ class VaultTlsFeature(TlsFeature):
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:
-        return VaultIntermediateTlsFeatureConfig
+        """Return the config type for the feature."""
+        return VaultTlsFeatureConfig
 
     def default_software_overrides(self) -> SoftwareConfig:
-        return SoftwareConfig()
+        """Feature software configuration."""
+        return SoftwareConfig(
+            charms={"manual-tls-certificates": CharmManifest(
+                channel="latest/stable")}
+        )
 
     def manifest_attributes_tfvar_map(self) -> dict:
-        return {self.tfplan: {}}
+        """Manifest attributes terraformvars map."""
+        return {
+            self.tfplan: {
+                "charms": {
+                    "manual-tls-certificates": {
+                        "channel": "manual-tls-certificates-channel",
+                        "revision": "manual-tls-certificates-revision",
+                        "config": "manual-tls-certificates-config",
+                    }
+                }
+            }
+        }
+
+    def preseed_questions_content(self) -> list:
+        """Generate preseed manifest content."""
+        certificate_question_bank = questions.QuestionBank(
+            questions=certificate_questions("unit", "subject"),
+            console=console,
+            previous_answers={},
+        )
+        content = questions.show_questions(
+            certificate_question_bank,
+            section="certificates",
+            subsection="<CSR x500UniqueIdentifier>",
+            section_description="TLS Certificates",
+            comment_out=True,
+        )
+        return content
 
     def set_application_names(self, deployment: Deployment) -> list:
         """Application names handled by the terraform plan."""
         return ["vault"]
 
     def set_tfvars_on_enable(
-        self, deployment: Deployment, config: VaultIntermediateTlsFeatureConfig
+        self, deployment: Deployment, config: VaultTlsFeatureConfig
     ) -> dict:
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
@@ -240,7 +263,7 @@ class VaultTlsFeature(TlsFeature):
 
     def preseed_questions_content(self) -> list:
         bank = questions.QuestionBank(
-            questions=intermediate_ca_questions(),
+            questions=certificate_questions("unit", "subject"),
             console=console,
             previous_answers={},
         )
@@ -296,11 +319,11 @@ class VaultTlsFeature(TlsFeature):
         """Enable Vault as an intermediate CA."""
         feature_manager = deployment.get_feature_manager()
         enabled_features = feature_manager.enabled_features(deployment)
-        if VAULT_APP not in enabled_features:
-            raise click.ClickException(
-                "Vault must be enabled first (run `sunbeam enable vault`)."
-            )
-        console.print(f"Skipped Vault enable check, due to VAULT_APP having value {VALUE_APP}")
+        for feature in enabled_features:
+            if VAULT_APP != feature.name:
+                raise click.ClickException(
+                    "Vault must be enabled first (run `sunbeam enable vault`)."
+                )
 
         jhelper = JujuHelper(deployment.get_connected_controller())
         try:
@@ -325,7 +348,7 @@ class VaultTlsFeature(TlsFeature):
         except Exception:
             pass
 
-        cfg = VaultIntermediateTlsFeatureConfig(
+        cfg = VaultTlsFeatureConfig(
             ca=ca, ca_chain=ca_chain, endpoints=endpoints
         )
         # self.enable_feature(deployment, cfg, show_hints)
