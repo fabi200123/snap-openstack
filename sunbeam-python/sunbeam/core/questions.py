@@ -124,8 +124,10 @@ class Question(typing.Generic[T]):
         :param console: the console to prompt on
         :param password: whether answer to question is a password
         :param validation_function: A function to use to validate the answer,
-                                    must raise ValueError when value is invalid.
-        :param description: A description of the question, displayed when asking.
+                                    must raise ValueError when value is
+                                    invalid.
+        :param description: A description of the question, displayed when
+                            asking.
         """
         self.preseed = None
         self.console = None
@@ -357,17 +359,20 @@ def show_questions(
         comment = ""
     if section:
         if section_description:
-            lines.append(f"{outer_indent}{comment}{indent}# {section_description}")
+            lines.append(
+                f"{outer_indent}{comment}{indent}# {section_description}")
         lines.append(f"{outer_indent}{comment}{indent}{section}:")
         indent = space * 2
-    # TODO(hemanth): To handle multi level subsections, currently only one level is
+    # TODO(hemanth): To handle multi level subsections,
+    # TODO: currently only one level is
     # considered
     if subsection:
         lines.append(f"{outer_indent}{comment}{indent}{subsection}:")
         indent = space * 4
-    # TODO(hemanth): Repeat Questions bank for multiple subsections of same type
-    # Example: To generate preseed with microceph_config for multiple nodes if values
-    # are available in cluster db.
+    # TODO(hemanth): Repeat Questions bank for multiple subsections
+    # TODO: of same type
+    # Example: To generate preseed with microceph_config for multiple nodes
+    # if values are available in cluster db.
     for key, question in question_bank.questions.items():
         default = question.calculate_default()
         if default is None:

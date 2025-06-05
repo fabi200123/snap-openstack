@@ -146,7 +146,8 @@ class ConfigureCAStep(BaseStep):
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
             if not subject:
-                raise click.ClickException(f"Not a valid CSR for unit {unit_name}")
+                raise click.ClickException(
+                    f"Not a valid CSR for unit {unit_name}")
 
             cert_questions = certificate_questions(unit_name, subject)
             certificates_bank = questions.QuestionBank(

@@ -3,16 +3,15 @@
 
 import json
 import logging
+import typing
 from pathlib import Path
 
 import click
 import yaml
 from packaging.version import Version
 from rich.console import Console
-from rich.status import Status
 from rich.table import Table
 
-from sunbeam.clusterd.client import Client
 from sunbeam.clusterd.service import (
     ConfigItemNotFoundException,
 )
@@ -20,12 +19,10 @@ from sunbeam.core import questions
 from sunbeam.core.common import (
     FORMAT_TABLE,
     FORMAT_YAML,
-    BaseStep,
-    Result,
-    ResultType,
     read_config,
     run_plan,
     str_presenter,
+    SunbeamException,
 )
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import (
@@ -41,7 +38,10 @@ from sunbeam.core.manifest import (
     SoftwareConfig,
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
-from sunbeam.features.interface.utils import validate_ca_certificate, validate_ca_chain
+from sunbeam.features.interface.utils import (
+    validate_ca_certificate,
+    validate_ca_chain,
+)
 from sunbeam.features.interface.v1.openstack import (
     TerraformPlanLocation,
     WaitForApplicationsStep,
@@ -53,8 +53,6 @@ from sunbeam.features.tls.ca import (
 )
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
-    TlsFeature,
-    TlsFeatureConfig,
     certificate_questions,
     get_outstanding_certificate_requests,
 )
@@ -64,11 +62,12 @@ CERTIFICATE_FEATURE_KEY = "TlsProvider"
 CA_APP_NAME = "manual-tls-certificates"
 LOG = logging.getLogger(__name__)
 console = Console()
+ConfigType = typing.TypeVar("ConfigType", bound=FeatureConfig)
 
 
 class VaultTlsFeature(CaTlsFeature):
     version = Version("0.0.1")
-    
+
     name = "tls.vault"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
@@ -79,7 +78,8 @@ class VaultTlsFeature(CaTlsFeature):
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
         return SoftwareConfig(
-            charms={"manual-tls-certificates": CharmManifest(channel="latest/stable")}
+            charms={"manual-tls-certificates": CharmManifest(
+                channel="1/edge")}
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:
@@ -111,7 +111,6 @@ class VaultTlsFeature(CaTlsFeature):
             comment_out=True,
         )
         return content
-
 
     @click.command()
     @click.option(
@@ -146,7 +145,11 @@ class VaultTlsFeature(CaTlsFeature):
         endpoints: list[str],
         show_hints: bool,
     ):
-        """Enable CA feature."""
+        """Enable TLS Vault feature."""
+        # Check if vault is enabled
+        name = "vault"
+
+        self.pre_enable(deployment, CaTlsFeatureConfig, show_hints)
         self.enable_feature(
             deployment,
             CaTlsFeatureConfig(ca=ca, ca_chain=ca_chain, endpoints=endpoints),
@@ -159,7 +162,7 @@ class VaultTlsFeature(CaTlsFeature):
     def disable_cmd(self, deployment: Deployment, show_hints: bool):
         """Disable CA feature."""
         self.disable_feature(deployment, show_hints)
-        console.print("CA feature disabled")
+        console.print("TLS Vault feature disabled")
 
     def set_application_names(self, deployment: Deployment) -> list:
         """Application names handled by the terraform plan."""
@@ -182,7 +185,8 @@ class VaultTlsFeature(CaTlsFeature):
 
     def set_tfvars_on_disable(self, deployment: Deployment) -> dict:
         """Set terraform variables to disable the application."""
-        tfvars: dict[str, None | str | bool] = {"traefik-to-tls-provider": None}
+        tfvars: dict[str, None | str | bool] = {
+            "traefik-to-tls-provider": None}
         provider_config = self.provider_config(deployment)
         endpoints = provider_config.get("endpoints", [])
         if "public" in endpoints:
@@ -216,14 +220,16 @@ class VaultTlsFeature(CaTlsFeature):
         help="Output format",
     )
     @pass_method_obj
-    def list_outstanding_csrs(self, deployment: Deployment, format: str) -> None:
+    def list_outstanding_csrs(self, deployment: Deployment,
+                              format: str) -> None:
         """List outstanding CSRs."""
         app = CA_APP_NAME
         model = OPENSTACK_MODEL
         action_cmd = "get-outstanding-certificate-requests"
         jhelper = JujuHelper(deployment.get_connected_controller())
         try:
-            action_result = get_outstanding_certificate_requests(app, model, jhelper)
+            action_result = get_outstanding_certificate_requests(
+                app, model, jhelper)
         except LeaderNotFoundException as e:
             LOG.debug(f"Unable to get {app} leader to print CSRs")
             raise click.ClickException(str(e))
@@ -275,7 +281,8 @@ class VaultTlsFeature(CaTlsFeature):
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
         preseed = {}
-        if (ca := manifest.get_feature(self.name.split(".")[-1])) and ca.config:
+        if (ca := manifest.get_feature(
+             self.name.split(".")[-1])) and ca.config:
             preseed = ca.config.model_dump(by_alias=True)
         model = OPENSTACK_MODEL
         apps_to_monitor = ["traefik", "traefik-public", "keystone"]
@@ -306,7 +313,8 @@ class VaultTlsFeature(CaTlsFeature):
             # endpoint, update the identity-service relation data on every
             # related application.
             WaitForApplicationsStep(
-                jhelper, apps_to_monitor, model, INGRESS_CHANGE_APPLICATION_TIMEOUT
+                jhelper, apps_to_monitor, model,
+                INGRESS_CHANGE_APPLICATION_TIMEOUT
             ),
         ]
         run_plan(plan, console, show_hints)
@@ -328,3 +336,34 @@ class VaultTlsFeature(CaTlsFeature):
                 },
             ],
         }
+
+    def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
+        """Check if Vault application is active."""
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        try:
+            application = run_sync(jhelper.get_application("vault", model))
+        except SunbeamException:
+            raise click.ClickException(
+                "Cannot enable TLS Vault as Vault is not enabled."
+                "Enable Vault first.")
+        status = application.status
+        run_sync(model.disconnect())
+        if status == "active":
+            return True
+        elif status == "blocked":
+            raise click.ClickException(
+                "Vault application is blocked. Initialize and authorize"
+                "Vault first.")
+        return False
+
+    def pre_enable(
+        self, deployment: Deployment, config: ConfigType, show_hints: bool
+    ) -> None:
+        """Handler to perform tasks before enabling the feature."""
+        super().pre_enable(deployment, config, show_hints)
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        if not self.is_vault_application_active(jhelper):
+            raise click.ClickException(
+                "Cannot enable TLS Vault as Vault is not enabled."
+                "Enable Vault first."
+            )
