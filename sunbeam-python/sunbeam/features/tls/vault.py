@@ -352,8 +352,19 @@ class VaultTlsFeature(CaTlsFeature):
             return True
         elif status == "blocked":
             raise click.ClickException(
-                "Vault application is blocked. Initialize and authorize"
+                "Vault application is blocked. Initialize and authorize "
                 "Vault first.")
+        return False
+
+    def is_tls_ca_enabled(self, jhelper: JujuHelper) -> bool:
+        """Check if Vault application is active."""
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        try:
+            _ = run_sync(jhelper.get_application(
+                "manual-tls-certificates", model))
+        except SunbeamException:
+            return True
+        run_sync(model.disconnect())
         return False
 
     def pre_enable(
@@ -366,4 +377,8 @@ class VaultTlsFeature(CaTlsFeature):
             raise click.ClickException(
                 "Cannot enable TLS Vault as Vault is not enabled."
                 "Enable Vault first."
+            )
+        if not self.is_tls_ca_enabled(jhelper):
+            raise click.ClickException(
+                "Cannot enable TLS Vault as TLS CA is already enabled."
             )
