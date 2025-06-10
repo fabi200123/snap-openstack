@@ -59,7 +59,7 @@ from sunbeam.features.tls.common import (
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
 CERTIFICATE_FEATURE_KEY = "TlsProvider"
-CA_APP_NAME = "manual-tls-certificates"
+CA_APP_NAME = "vault"
 LOG = logging.getLogger(__name__)
 console = Console()
 ConfigType = typing.TypeVar("ConfigType", bound=FeatureConfig)
@@ -160,7 +160,7 @@ class VaultTlsFeature(CaTlsFeature):
     @click_option_show_hints
     @pass_method_obj
     def disable_cmd(self, deployment: Deployment, show_hints: bool):
-        """Disable CA feature."""
+        """Disable TLS Vault feature."""
         self.disable_feature(deployment, show_hints)
         console.print("TLS Vault feature disabled")
 
@@ -223,7 +223,7 @@ class VaultTlsFeature(CaTlsFeature):
     def list_outstanding_csrs(self, deployment: Deployment,
                               format: str) -> None:
         """List outstanding CSRs."""
-        app = CA_APP_NAME
+        app = "manual-tls-certificates"
         model = OPENSTACK_MODEL
         action_cmd = "get-outstanding-certificate-requests"
         jhelper = JujuHelper(deployment.get_connected_controller())
