@@ -247,7 +247,7 @@ class CaTlsFeature(TlsFeature):
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
         return SoftwareConfig(
-            charms={"manual-tls-certificates": CharmManifest(channel="latest/stable")}
+            charms={"manual-tls-certificates": CharmManifest(channel="1/edge")}
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:
