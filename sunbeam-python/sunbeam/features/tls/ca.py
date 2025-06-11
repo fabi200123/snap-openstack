@@ -191,6 +191,16 @@ class ConfigureCAStep(BaseStep):
             return Result(ResultType.FAILED, str(e))
 
         LOG.debug(f"Process certs: {self.process_certs}")
+        certs = re.findall(
+            r"(-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----)",
+            self.ca_chain,
+            flags=re.DOTALL,
+        )
+        if not certs:
+            LOG.error("No certificates found in ca_chain")
+            return Result(ResultType.FAILED, "Invalid CA chain")
+
+        first_cert = certs[0]
         for subject, request in self.process_certs.items():
             csr = request.get("csr")
             csr = encode_base64_as_string(csr)
@@ -199,7 +209,7 @@ class ConfigureCAStep(BaseStep):
 
             action_params = {
                 "relation-id": request.get("relation_id"),
-                "certificate": request.get("certificate"),
+                "certificate": first_cert,
                 "ca-chain": self.ca_chain,
                 "ca-certificate": self.ca_cert,
                 "certificate-signing-request": str(csr),
