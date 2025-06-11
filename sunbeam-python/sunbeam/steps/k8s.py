@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ipaddress
+import json
 import logging
 import subprocess
 import typing
@@ -77,12 +78,14 @@ if typing.TYPE_CHECKING:
     import lightkube.core.client as l_client
     import lightkube.core.exceptions as l_exceptions
     from lightkube.models import meta_v1
-    from lightkube.resources import core_v1
+    from lightkube.resources import apps_v1, autoscaling_v2, core_v1
 else:
     l_kubeconfig = LazyImport("lightkube.config.kubeconfig")
     l_client = LazyImport("lightkube.core.client")
     l_exceptions = LazyImport("lightkube.core.exceptions")
     meta_v1 = LazyImport("lightkube.models.meta_v1")
+    apps_v1 = LazyImport("lightkube.resources.apps_v1")
+    autoscaling_v2 = LazyImport("lightkube.resources.autoscaling_v2")
     core_v1 = LazyImport("lightkube.resources.core_v1")
 
 
@@ -95,6 +98,33 @@ K8S_DESTROY_TIMEOUT = 900
 K8S_UNIT_TIMEOUT = 1800  # 30 minutes, adding / removing units can take a long time
 K8S_ENABLE_ADDONS_TIMEOUT = 180  # 3 minutes
 K8SD_SNAP_SOCKET = "/var/snap/k8s/common/var/lib/k8sd/state/control.socket"
+
+COREDNS_HPA = {
+    "enabled": True,
+    "minReplicas": 1,
+    "maxReplicas": 5,
+    "metrics": [
+        {
+            "type": "Resource",
+            "resource": {
+                "name": "cpu",
+                "target": {"type": "Utilization", "averageUtilization": 80},
+            },
+        }
+    ],
+    "behavior": {
+        "scaleUp": {"policies": [{"periodSeconds": 30, "type": "Pods", "value": 2}]},
+        "scaleDown": {
+            "stabilizationWindowSeconds": 300,
+            "policies": [{"type": "Pods", "value": 2, "periodSeconds": 60}],
+        },
+    },
+}
+
+COREDNS_RESOURCES = {
+    "limits": {"cpu": "500m", "memory": "128Mi"},
+    "requests": {"cpu": "500m", "memory": "128Mi"},
+}
 
 
 def validate_cidrs(ip_ranges: str, separator: str = ","):
@@ -1529,5 +1559,107 @@ class EnsureDefaultL2AdvertisementMutedStep(BaseStep):
             return Result(
                 ResultType.FAILED, "Failed to update L2 default advertisement"
             )
+
+        return Result(ResultType.COMPLETED)
+
+
+class PatchCoreDNSStep(BaseStep):
+    """Ensure HA for Coredns.
+
+    This is a workaround for https://github.com/canonical/k8s-operator/issues/504
+    Resources and HPA settings are updated for coredns
+    """
+
+    def __init__(
+        self,
+        deployment: Deployment,
+        jhelper: JujuHelper,
+    ):
+        super().__init__(
+            "Patch Coredns resources and horizontal pod autoscaling",
+            "Patching Coredns resources and horizontal pod autoscaling",
+        )
+        self.deployment = deployment
+        self.client = deployment.get_client()
+        self.jhelper = jhelper
+        self.juju_app_name = "k8s"
+        self.coredns_namespace = "kube-system"
+        self.coredns_hpa = "ck-dns-coredns"
+        self.timeout = 180  # 3 minutes for helm upgrade
+
+    def is_skip(self, status: Status | None = None) -> Result:
+        """Determines if the step should be skipped or not.
+
+        :return: ResultType.SKIPPED if the Step should be skipped,
+                 ResultType.COMPLETED or ResultType.FAILED otherwise
+        """
+        try:
+            self.kube = _get_kube_client(
+                self.client,
+                self.coredns_namespace,
+            )
+        except KubeClientError as e:
+            LOG.debug("Failed to create k8s client", exc_info=True)
+            return Result(ResultType.FAILED, str(e))
+
+        try:
+            self.kube.get(autoscaling_v2.HorizontalPodAutoscaler, name=self.coredns_hpa)
+            LOG.debug("Horizontal pod autoscaler exists for coredns")
+            return Result(ResultType.SKIPPED)
+        except l_exceptions.ApiError as e:
+            if "not found" in str(e):
+                return Result(ResultType.COMPLETED)
+
+            LOG.debug("Failed to get coredns hpa", exc_info=True)
+            return Result(ResultType.FAILED, str(e))
+
+    def run(self, status: Status | None) -> Result:
+        """Run the step to completion.
+
+        Invoked when the step is run and returns a ResultType to indicate
+
+        :return:
+        """
+        try:
+            leader = run_sync(
+                self.jhelper.get_leader_unit(
+                    self.juju_app_name, self.deployment.openstack_machines_model
+                )
+            )
+        except JujuException as e:
+            LOG.debug(f"Failed to get {self.juju_app_name} leader", exc_info=True)
+            return Result(ResultType.FAILED, str(e))
+
+        hpa = json.dumps(COREDNS_HPA)
+        resources = json.dumps(COREDNS_RESOURCES)
+        try:
+            cmd_str = (
+                f"k8s helm upgrade -n {self.coredns_namespace} ck-dns "
+                "/snap/k8s/current/k8s/manifests/charts/coredns-*.tgz"
+                f" --reuse-values --set-json hpa='{hpa}',resources='{resources}'"
+            )
+            LOG.debug(f"Running cmd in unit {leader}: {cmd_str}")
+
+            result = run_sync(
+                self.jhelper.run_cmd_on_machine_unit_payload(
+                    leader,
+                    self.deployment.openstack_machines_model,
+                    cmd_str,
+                    self.timeout,
+                )
+            )
+            LOG.debug(f"Result: {result}")
+
+            if result.get("return-code") != 0:
+                return Result(
+                    ResultType.FAILED,
+                    f"Error in setting coredns hpa: {result.get('stderr')}",
+                )
+        except JujuException as e:
+            LOG.info(
+                "Failed to run helm upgrade on coredns",
+                exc_info=True,
+            )
+            return Result(ResultType.FAILED, str(e))
 
         return Result(ResultType.COMPLETED)
