@@ -19,6 +19,7 @@ from sunbeam.core.common import ResultType
 from sunbeam.core.juju import (
     ActionFailedException,
     ApplicationNotFoundException,
+    JujuException,
     LeaderNotFoundException,
 )
 from sunbeam.steps.k8s import (
@@ -30,6 +31,7 @@ from sunbeam.steps.k8s import (
     EnsureK8SUnitsTaggedStep,
     EnsureL2AdvertisementByHostStep,
     KubeClientError,
+    PatchCoreDNSStep,
     StoreK8SKubeConfigStep,
     _get_kube_client,
     _get_machines_space_ips,
@@ -966,3 +968,87 @@ _get_machines_space_ips_tests_cases = {
 def test_get_machines_space_ips(interfaces, space, networks, expected):
     result = set(_get_machines_space_ips(interfaces, space, networks))
     assert result == expected
+
+
+class TestPatchCoreDNSStep(unittest.TestCase):
+    def setUp(self):
+        self.deployment = Mock()
+        self.client = Mock()
+        self.jhelper = AsyncMock()
+        self.step = PatchCoreDNSStep(self.deployment, self.jhelper)
+        self.kube = Mock()
+
+    def test_is_skip(self):
+        api_error = ApiError(
+            Mock(),
+            httpx.Response(
+                status_code=404,
+                content=json.dumps(
+                    {
+                        "code": 404,
+                        "message": "horizontal podautoscaler not found",
+                    }
+                ),
+            ),
+        )
+        self.kube.get = Mock(side_effect=api_error)
+
+        with patch("sunbeam.steps.k8s._get_kube_client", return_value=self.kube):
+            result = self.step.is_skip()
+        assert result.result_type == ResultType.COMPLETED
+
+    def test_is_skip_kube_get_error(self):
+        api_error = ApiError(
+            Mock(),
+            httpx.Response(
+                status_code=500,
+                content=json.dumps(
+                    {
+                        "code": 500,
+                        "message": "Unknown error",
+                    }
+                ),
+            ),
+        )
+        self.kube.get = Mock(side_effect=api_error)
+
+        with patch("sunbeam.steps.k8s._get_kube_client", return_value=self.kube):
+            result = self.step.is_skip()
+        assert result.result_type == ResultType.FAILED
+
+    def test_is_skip_hpa_already_exists(self):
+        with patch("sunbeam.steps.k8s._get_kube_client", return_value=self.kube):
+            result = self.step.is_skip()
+        assert result.result_type == ResultType.SKIPPED
+
+    def test_run(self):
+        self.jhelper.run_cmd_on_machine_unit_payload.return_value = {"return-code": 0}
+        result = self.step.run(None)
+        assert result.result_type == ResultType.COMPLETED
+        self.jhelper.get_leader_unit.assert_called_once()
+        self.jhelper.run_cmd_on_machine_unit_payload.assert_called_once()
+
+    def test_run_helm_upgrade_failed(self):
+        self.jhelper.run_cmd_on_machine_unit_payload.return_value = {"return-code": 1}
+        result = self.step.run(None)
+        assert result.result_type == ResultType.FAILED
+        self.jhelper.get_leader_unit.assert_called_once()
+        self.jhelper.run_cmd_on_machine_unit_payload.assert_called_once()
+
+    def test_run_failed_on_juju_run_on_machine_unit(self):
+        self.jhelper.run_cmd_on_machine_unit_payload.side_effect = JujuException(
+            "Not able to run command"
+        )
+        result = self.step.run(None)
+        assert result.result_type == ResultType.FAILED
+        self.jhelper.get_leader_unit.assert_called_once()
+        self.jhelper.run_cmd_on_machine_unit_payload.assert_called_once()
+
+    def test_run_leader_not_found(self):
+        self.jhelper.get_leader_unit.side_effect = LeaderNotFoundException(
+            "Leader missing..."
+        )
+        result = self.step.run(None)
+        assert result.result_type == ResultType.FAILED
+        self.jhelper.get_leader_unit.assert_called_once()
+        self.jhelper.run_cmd_on_machine_unit_payload.assert_not_called()

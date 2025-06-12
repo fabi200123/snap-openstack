@@ -810,6 +810,36 @@ class JujuHelper:
             unit = await self._get_leader_unit(name, model_impl)
             return unit.machine.entity_id
 
+    async def run_cmd_on_machine_unit_payload(
+        self,
+        name: str,
+        model: str,
+        cmd: str,
+        timeout: int | None = None,
+    ) -> dict:
+        """Run a shell command on a machine unit.
+
+        Returns action results irrespective of the return-code
+        in action results.
+
+        :name: unit name
+        :model: Name of the model where the application is located
+        :cmd: Command to run
+        :timeout: Timeout in seconds
+        :returns: Command results
+
+        Command execution failures are part of the results with
+        return-code, stdout, stderr.
+        """
+        async with self.get_model_closing(model) as model_impl:
+            unit = await self.get_unit(name, model_impl)
+            try:
+                action = await unit.run(cmd, timeout=timeout, block=True)
+            except asyncio.TimeoutError as e:
+                raise TimeoutException(f"Timeout while running command: {cmd}") from e
+
+            return action.results
+
     async def run_cmd_on_unit_payload(
         self,
         name: str,
