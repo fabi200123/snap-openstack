@@ -344,20 +344,24 @@ def get_juju_model_machine_plans(
     jhelper: JujuHelper,
     local_management_ip: str,
     credential_name: str | None,
+    manifest: Manifest,
 ) -> list[BaseStep]:
     """Get Juju model and machine related plans."""
     proxy_settings = deployment.get_proxy_settings()
+    model = deployment.openstack_machines_model
+    bootstrap_model_config = manifest.core.software.juju.bootstrap_model_configs.get(
+        model
+    )
     return [
         AddJujuModelStep(
             jhelper,
-            deployment.openstack_machines_model,
+            model,
             deployment.name,
             credential_name,
             proxy_settings,
+            bootstrap_model_config,
         ),
-        AddJujuMachineStep(
-            local_management_ip, deployment.openstack_machines_model, jhelper
-        ),
+        AddJujuMachineStep(local_management_ip, model, jhelper),
     ]
 
 
@@ -511,7 +515,7 @@ def deploy_and_migrate_juju_controller(
     jhelper = JujuHelper(deployment.get_connected_controller())
 
     plan2 = get_juju_model_machine_plans(
-        deployment, jhelper, local_management_ip, "empty-creds"
+        deployment, jhelper, local_management_ip, "empty-creds", manifest
     )
     run_plan(plan2, console, show_hints)
 
@@ -712,7 +716,7 @@ def bootstrap(
         jhelper = JujuHelper(deployment.get_connected_controller())
 
         plan12 = get_juju_model_machine_plans(
-            deployment, jhelper, local_management_ip, None
+            deployment, jhelper, local_management_ip, None, manifest
         )
         run_plan(plan12, console, show_hints)
 

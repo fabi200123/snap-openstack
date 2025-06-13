@@ -430,6 +430,9 @@ def bootstrap(
             deployment.name,
             deployment.name,
             proxy_settings,
+            manifest.core.software.juju.bootstrap_model_configs.get(
+                deployment.infra_model
+            ),
         )
     )
     plan2.append(
@@ -589,6 +592,9 @@ def deploy(
             deployment.name,
             deployment.name,
             proxy_settings,
+            manifest.core.software.juju.bootstrap_model_configs.get(
+                deployment.openstack_machines_model
+            ),
         )
     )
     plan.append(MaasAddMachinesToClusterdStep(client, maas_client))

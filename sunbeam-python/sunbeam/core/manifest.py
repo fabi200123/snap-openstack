@@ -53,6 +53,16 @@ class JujuManifest(pydantic.BaseModel):
     destroy_args: list[str] = Field(
         default=[], description="Extra args for juju destroy-controller"
     )
+    bootstrap_model_configs: dict[str, dict[str, Any]] = Field(
+        default={},
+        description="""Mapping of model to model configuration.
+
+        This model configuration are guaranteed to be applied at model creation
+        only. Only, and only if, they are not overriden by Sunbeam.
+        This is offered as a convenience to allow users an easy way to
+        pass initial model configuration.
+        """,
+    )
 
 
 class CharmManifest(pydantic.BaseModel):
