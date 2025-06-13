@@ -147,7 +147,6 @@ class VaultTlsFeature(CaTlsFeature):
     ):
         """Enable TLS Vault feature."""
         # Check if vault is enabled
-        name = "vault"
 
         self.pre_enable(deployment, CaTlsFeatureConfig, show_hints)
         self.enable_feature(
