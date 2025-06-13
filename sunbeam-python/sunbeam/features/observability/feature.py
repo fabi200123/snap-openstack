@@ -129,9 +129,17 @@ class DeployObservabilityStackStep(BaseStep, JujuStepHelper):
 
     def run(self, status: Status | None = None) -> Result:
         """Execute configuration using terraform."""
+        f_manifest = self.manifest.get_feature(self.feature.name.split(".")[-1])
+        if f_manifest is not None:
+            model_config = f_manifest.software.juju.bootstrap_model_configs.get(
+                OBSERVABILITY_MODEL, {}
+            )
+        else:
+            model_config = {}
         proxy_settings = self.deployment.get_proxy_settings()
-        model_config = convert_proxy_to_model_configs(proxy_settings)
+        model_config.update(convert_proxy_to_model_configs(proxy_settings))
         model_config.update({"workload-storage": K8SHelper.get_default_storageclass()})
+
         extra_tfvars = {
             "model": self.model,
             "cloud": self.cloud,

@@ -1485,6 +1485,7 @@ class AddJujuModelStep(BaseStep):
         cloud: str,
         credential: str | None = None,
         proxy_settings: dict | None = None,
+        model_config: dict | None = None,
     ):
         super().__init__(f"Add model {model}", f"Adding model {model}")
         self.jhelper = jhelper
@@ -1492,6 +1493,7 @@ class AddJujuModelStep(BaseStep):
         self.cloud = cloud
         self.credential = credential
         self.proxy_settings = proxy_settings or {}
+        self.model_config = model_config or {}
 
     def is_skip(self, status: Status | None = None) -> Result:
         """Determines if the step should be skipped or not."""
@@ -1503,13 +1505,16 @@ class AddJujuModelStep(BaseStep):
     def run(self, status: Status | None = None) -> Result:
         """Add model with configs."""
         try:
-            model_config = convert_proxy_to_model_configs(self.proxy_settings)
+            self.model_config.update(
+                convert_proxy_to_model_configs(self.proxy_settings)
+            )
+            LOG.debug(f"Adding model {self.model} with config: {self.model_config}")
             model = run_sync(
                 self.jhelper.add_model(
                     self.model,
                     cloud=self.cloud,
                     credential=self.credential,
-                    config=model_config,
+                    config=self.model_config,
                 )
             )
             run_sync(model.disconnect())
