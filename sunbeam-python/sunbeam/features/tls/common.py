@@ -65,6 +65,14 @@ class TlsFeature(OpenStackControlPlaneFeature):
     version = Version("0.0.1")
     group = TlsFeatureGroup
 
+    @property
+    def ca_cert_name(self) -> str:
+        """CA Cert name to be used to add to keystone."""
+        # Keystone lists ca cert names with any .'s replaced
+        # with -.
+        # https://opendev.org/openstack/sunbeam-charms/src/commit/c8761241f3b7be381101fbe5942aa2174daf1797/charms/keystone-k8s/src/charm.py#L629
+        return self.feature_key.replace(".", "-")
+
     @click.group()
     def enable_tls(self) -> None:
         """Enable TLS group."""
@@ -103,7 +111,7 @@ class TlsFeature(OpenStackControlPlaneFeature):
         plan = [
             AddCACertsToKeystoneStep(
                 jhelper,
-                self.feature_key,
+                self.ca_cert_name,
                 config.ca,  # type: ignore
                 config.ca_chain,  # type: ignore
             )
@@ -131,7 +139,7 @@ class TlsFeature(OpenStackControlPlaneFeature):
             apps_to_monitor.append("traefik-rgw")
 
         plan = [
-            RemoveCACertsFromKeystoneStep(jhelper, self.feature_key),
+            RemoveCACertsFromKeystoneStep(jhelper, self.ca_cert_name, self.feature_key),
             WaitForApplicationsStep(
                 jhelper, apps_to_monitor, model, INGRESS_CHANGE_APPLICATION_TIMEOUT
             ),
@@ -156,7 +164,7 @@ class AddCACertsToKeystoneStep(BaseStep):
             "Transfer CA certs to keystone", "Transferring CA certificates to keystone"
         )
         self.jhelper = jhelper
-        self.name = name.lower()
+        self.cert_name = name.lower()
         self.ca_cert = ca_cert
         self.ca_chain = ca_chain
         self.app = "keystone"
@@ -191,7 +199,7 @@ class AddCACertsToKeystoneStep(BaseStep):
 
         action_result.pop("return-code")
         ca_list = action_result
-        if self.name in ca_list:
+        if self.cert_name in ca_list:
             return Result(ResultType.SKIPPED)
 
         return Result(ResultType.COMPLETED)
@@ -206,7 +214,7 @@ class AddCACertsToKeystoneStep(BaseStep):
             return Result(ResultType.FAILED, str(e))
 
         action_params = {
-            "name": self.name,
+            "name": self.cert_name,
             "ca": self.ca_cert,
             "chain": self.ca_chain,
         }
@@ -236,12 +244,14 @@ class RemoveCACertsFromKeystoneStep(BaseStep):
         self,
         jhelper: JujuHelper,
         name: str,
+        feature_key: str,
     ):
         super().__init__(
             "Remove CA certs from keystone", "Removing CA certificates from keystone"
         )
         self.jhelper = jhelper
-        self.name = name.lower()
+        self.cert_name = name.lower()
+        self.feature_key = feature_key.lower()
         self.app = "keystone"
         self.model = OPENSTACK_MODEL
 
@@ -274,7 +284,10 @@ class RemoveCACertsFromKeystoneStep(BaseStep):
 
         action_result.pop("return-code")
         ca_list = action_result
-        if self.name not in ca_list:
+        # Replace any dot with hyphen in ca cert name.
+        # self.cert_name is ensured not to have dot, however to maintain backward
+        # compatability this is needed.
+        if self.cert_name.replace(".", "-") not in ca_list:
             return Result(ResultType.SKIPPED)
 
         return Result(ResultType.COMPLETED)
@@ -288,15 +301,29 @@ class RemoveCACertsFromKeystoneStep(BaseStep):
             LOG.debug(f"Unable to get {self.app} leader")
             return Result(ResultType.FAILED, str(e))
 
-        action_params = {"name": self.name}
+        retry_with_feature_key = False
+        action_params = {"name": self.cert_name}
         LOG.debug(f"Running action {action_cmd} with params {action_params}")
         try:
             action_result = run_sync(
                 self.jhelper.run_action(unit, self.model, action_cmd, action_params)
             )
         except ActionFailedException as e:
-            LOG.debug(f"Running action {action_cmd} on {unit} failed")
-            return Result(ResultType.FAILED, str(e))
+            LOG.debug(f"Running action {action_cmd} on {unit} failed: {str(e)}")
+            retry_with_feature_key = True
+
+        # For backward compatiblity reasons, try to run remove-ca-cert action
+        # with feature_key as ca cert name
+        if retry_with_feature_key:
+            action_params = {"name": self.feature_key}
+            LOG.debug(f"Running action {action_cmd} with params {action_params}")
+            try:
+                action_result = run_sync(
+                    self.jhelper.run_action(unit, self.model, action_cmd, action_params)
+                )
+            except ActionFailedException as e:
+                LOG.debug(f"Running action {action_cmd} on {unit} failed")
+                return Result(ResultType.FAILED, str(e))
 
         LOG.debug(f"Result from action {action_cmd}: {action_result}")
         if action_result.get("return-code", 0) > 1:

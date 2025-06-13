@@ -149,7 +149,7 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_is_skip(self, jhelper):
         name = "cabundle"
         jhelper.run_action.return_value = {"return-code": 0, name: "fake-ca-cert"}
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.is_skip()
 
         jhelper.run_action.assert_called_once()
@@ -158,7 +158,7 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_is_skip_when_cabundle_not_distributed(self, jhelper):
         name = "cabundle"
         jhelper.run_action.return_value = {"return-code": 0}
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.is_skip()
 
         jhelper.run_action.assert_called_once()
@@ -167,7 +167,7 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_is_skip_when_action_returns_failed_return_code(self, jhelper):
         name = "cabundle"
         jhelper.run_action.return_value = {"return-code": 2}
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.is_skip()
 
         jhelper.run_action.assert_called_once()
@@ -176,7 +176,7 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_is_skip_when_action_failed(self, jhelper):
         name = "cabundle"
         jhelper.run_action.side_effect = ActionFailedException("action failed...")
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.is_skip()
 
         jhelper.run_action.assert_called_once()
@@ -188,7 +188,7 @@ class TestRemoveCACertsFromKeystoneStep:
         jhelper.get_leader_unit.side_effect = LeaderNotFoundException(
             "not able to get leader..."
         )
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.is_skip()
 
         jhelper.run_action.assert_not_called()
@@ -198,7 +198,7 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_run(self, jhelper):
         name = "cabundle"
         jhelper.run_action.return_value = {"return-code": 0}
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.run()
 
         assert result.result_type == ResultType.COMPLETED
@@ -206,7 +206,7 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_run_when_action_returns_failed_return_code(self, jhelper):
         name = "cabundle"
         jhelper.run_action.return_value = {"return-code": 2}
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.run()
 
         jhelper.run_action.assert_called_once()
@@ -215,19 +215,32 @@ class TestRemoveCACertsFromKeystoneStep:
     def test_run_when_action_failed(self, jhelper):
         name = "cabundle"
         jhelper.run_action.side_effect = ActionFailedException("action failed...")
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.run()
 
-        jhelper.run_action.assert_called_once()
+        assert jhelper.run_action.call_count == 2
         assert result.result_type == ResultType.FAILED
         assert result.message == "action failed..."
+
+    def test_run_when_action_with_compatible_name_succeeds(self, jhelper):
+        name = "cabundle"
+        feature_key = "ca.bundle"
+        jhelper.run_action.side_effect = [
+            ActionFailedException("action failed..."),
+            {"return-code": 0},
+        ]
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, feature_key)
+        result = step.run()
+
+        assert jhelper.run_action.call_count == 2
+        assert result.result_type == ResultType.COMPLETED
 
     def test_run_when_leader_not_found(self, jhelper):
         name = "cabundle"
         jhelper.get_leader_unit.side_effect = LeaderNotFoundException(
             "not able to get leader..."
         )
-        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name)
+        step = tls.RemoveCACertsFromKeystoneStep(jhelper, name, name)
         result = step.run()
 
         jhelper.run_action.assert_not_called()
