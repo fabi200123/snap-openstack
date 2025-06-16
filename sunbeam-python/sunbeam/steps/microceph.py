@@ -11,7 +11,14 @@ from rich.status import Status
 from sunbeam.clusterd.client import Client
 from sunbeam.clusterd.service import NodeNotExistInClusterException
 from sunbeam.core import questions
-from sunbeam.core.common import BaseStep, Result, ResultType, Role, SunbeamException
+from sunbeam.core.common import (
+    BaseStep,
+    Result,
+    ResultType,
+    Role,
+    SunbeamException,
+    read_config,
+)
 from sunbeam.core.deployment import Deployment, Networks
 from sunbeam.core.juju import (
     ActionFailedException,
@@ -40,6 +47,8 @@ MICROCEPH_APP_TIMEOUT = 1200  # updating rgw configs can take some time
 MICROCEPH_UNIT_TIMEOUT = (
     1200  # 20 minutes, adding / removing units can take a long time
 )
+REGION_CONFIG_KEY = "Region"
+DEFAULT_REGION = "RegionOne"
 
 
 def microceph_questions():
@@ -156,6 +165,9 @@ class DeployMicrocephApplicationStep(DeployMachineApplicationStep):
                 "enable-rgw": "*",
                 "namespace-projects": True,
                 "default-pool-size": ceph_replica_scale(len(storage_nodes)),
+                "region": read_config(self.client, REGION_CONFIG_KEY).get(
+                    "region", DEFAULT_REGION
+                ),
             },
         }
 
