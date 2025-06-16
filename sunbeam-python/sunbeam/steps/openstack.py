@@ -38,7 +38,7 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.k8s import CREDENTIAL_SUFFIX, K8SHelper
 from sunbeam.core.manifest import Manifest
-from sunbeam.core.openstack import OPENSTACK_MODEL
+from sunbeam.core.openstack import DEFAULT_REGION, OPENSTACK_MODEL, REGION_CONFIG_KEY
 from sunbeam.core.questions import (
     PromptQuestion,
     QuestionBank,
@@ -63,8 +63,6 @@ CONFIG_KEY = "TerraformVarsOpenstack"
 TOPOLOGY_KEY = "Topology"
 DATABASE_MEMORY_KEY = "DatabaseMemory"
 DATABASE_STORAGE_KEY = "DatabaseStorage"
-REGION_CONFIG_KEY = "Region"
-DEFAULT_REGION = "RegionOne"
 DEFAULT_DATABASE_TOPOLOGY = "single"
 
 DATABASE_MAX_POOL_SIZE = 2

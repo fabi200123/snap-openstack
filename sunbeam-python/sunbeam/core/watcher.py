@@ -10,9 +10,9 @@ from rich.status import Status
 from sunbeam.core.common import BaseStep, SunbeamException, read_config
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import JujuHelper
+from sunbeam.core.openstack import REGION_CONFIG_KEY
 from sunbeam.core.openstack_api import get_admin_connection
 from sunbeam.lazy import LazyImport
-from sunbeam.steps.openstack import REGION_CONFIG_KEY
 
 if TYPE_CHECKING:
     from watcherclient import v1 as watcher

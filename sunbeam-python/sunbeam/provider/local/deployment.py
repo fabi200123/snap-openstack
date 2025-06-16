@@ -33,6 +33,7 @@ from sunbeam.core.juju import (
     JujuController,
 )
 from sunbeam.core.k8s import K8SHelper
+from sunbeam.core.openstack import REGION_CONFIG_KEY
 from sunbeam.core.questions import QuestionBank, load_answers, show_questions
 from sunbeam.provider.local.steps import local_hypervisor_questions
 from sunbeam.steps.clusterd import (
@@ -43,7 +44,6 @@ from sunbeam.steps.clusterd import (
 from sunbeam.steps.k8s import K8S_ADDONS_CONFIG_KEY, k8s_addons_questions
 from sunbeam.steps.microceph import CONFIG_DISKS_KEY, microceph_questions
 from sunbeam.steps.openstack import (
-    REGION_CONFIG_KEY,
     TOPOLOGY_KEY,
     database_topology_questions,
     region_questions,

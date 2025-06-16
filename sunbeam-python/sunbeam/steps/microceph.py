@@ -29,6 +29,7 @@ from sunbeam.core.juju import (
     run_sync,
 )
 from sunbeam.core.manifest import Manifest
+from sunbeam.core.openstack import DEFAULT_REGION, REGION_CONFIG_KEY
 from sunbeam.core.steps import (
     AddMachineUnitsStep,
     DeployMachineApplicationStep,
@@ -47,8 +48,6 @@ MICROCEPH_APP_TIMEOUT = 1200  # updating rgw configs can take some time
 MICROCEPH_UNIT_TIMEOUT = (
     1200  # 20 minutes, adding / removing units can take a long time
 )
-REGION_CONFIG_KEY = "Region"
-DEFAULT_REGION = "RegionOne"
 
 
 def microceph_questions():
