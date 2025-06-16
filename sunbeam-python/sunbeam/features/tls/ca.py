@@ -142,6 +142,8 @@ class ConfigureCAStep(BaseStep):
             csr = record.get("csr")
             app = record.get("application_name")
             relation_id = record.get("relation_id")
+            if not unit_name:
+                unit_name = str(relation_id)
 
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
@@ -398,7 +400,7 @@ class CaTlsFeature(TlsFeature):
         csrs = {
             unit: csr
             for record in certs_to_process
-            if (unit := record.get("unit_name")) and (csr := record.get("csr"))
+            if (unit := str(record.get("relation_id"))) and (csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
