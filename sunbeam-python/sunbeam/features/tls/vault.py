@@ -55,12 +55,10 @@ from sunbeam.features.interface.v1.openstack import (
     TerraformPlanLocation,
     WaitForApplicationsStep,
 )
-from sunbeam.features.tls.ca import (
-    TlsFeature,
-    TlsFeatureConfig,
-)
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
+    TlsFeature,
+    TlsFeatureConfig,
     certificate_questions,
     get_outstanding_certificate_requests,
 )
