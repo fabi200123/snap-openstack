@@ -408,17 +408,17 @@ class VaultTlsFeature(TlsFeature):
 
         certs_to_process = json.loads(action_result.get("result", "[]"))
         csrs = {
-            unit: csr
+            relation: csr
             for record in certs_to_process
-            if (unit := record.get("unit_name")) and (csr := record.get("csr"))
+            if (relation := str(record.get("relation_id"))) and (csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
             table = Table()
-            table.add_column("Unit name")
+            table.add_column("Relation ID")
             table.add_column("CSR")
-            for unit, csr in csrs.items():
-                table.add_row(unit, csr)
+            for relation, csr in csrs.items():
+                table.add_row(relation, csr)
             console.print(table)
         elif format == FORMAT_YAML:
             yaml.add_representer(str, str_presenter)
@@ -448,9 +448,7 @@ class VaultTlsFeature(TlsFeature):
              self.name.split(".")[-1])) and ca.config:
             preseed = ca.config.model_dump(by_alias=True)
         model = OPENSTACK_MODEL
-        apps_to_monitor = ["traefik", "traefik-public", "keystone"]
-        if client.cluster.list_nodes_by_role("storage"):
-            apps_to_monitor.append("traefik-rgw")
+        apps_to_monitor = [CA_APP_NAME]
 
         try:
             config = read_config(client, CERTIFICATE_FEATURE_KEY)

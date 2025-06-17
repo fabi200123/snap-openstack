@@ -346,7 +346,7 @@ def certificate_questions(unit: str, subject: str):
 def get_outstanding_certificate_requests(
     app: str, model: str, jhelper: JujuHelper
 ) -> dict:
-    """Get outstanding certificate requests from manual-tls-certificate 
+    """Get outstanding certificate requests from manual-tls-certificate
     operator.
 
     Returns the result from the action get-outstanding-certificate-requests
