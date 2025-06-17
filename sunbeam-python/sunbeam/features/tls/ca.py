@@ -434,7 +434,8 @@ class CaTlsFeature(TlsFeature):
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
         preseed = {}
-        if (ca := manifest.get_feature(self.name.split(".")[-1])) and ca.config:
+        if (ca := manifest.get_feature(
+             self.name.split(".")[-1])) and ca.config:
             preseed = ca.config.model_dump(by_alias=True)
         model = OPENSTACK_MODEL
         apps_to_monitor = ["traefik", "traefik-public", "keystone"]

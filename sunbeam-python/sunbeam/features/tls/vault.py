@@ -7,6 +7,7 @@ import typing
 from pathlib import Path
 
 import click
+import pydantic
 import yaml
 from packaging.version import Version
 from rich.console import Console
@@ -55,8 +56,8 @@ from sunbeam.features.interface.v1.openstack import (
     WaitForApplicationsStep,
 )
 from sunbeam.features.tls.ca import (
-    CaTlsFeatureConfig,
-    CaTlsFeature,
+    TlsFeature,
+    TlsFeatureConfig,
 )
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
@@ -70,6 +71,14 @@ CA_APP_NAME = "vault"
 LOG = logging.getLogger(__name__)
 console = Console()
 ConfigType = typing.TypeVar("ConfigType", bound=FeatureConfig)
+
+
+class _Certificate(pydantic.BaseModel):
+    certificate: str
+
+
+class VaultTlsFeatureConfig(TlsFeatureConfig):
+    certificates: dict[str, _Certificate] = {}
 
 
 class ConfigureVaultCAStep(BaseStep):
@@ -222,7 +231,7 @@ class ConfigureVaultCAStep(BaseStep):
         return Result(ResultType.COMPLETED)
 
 
-class VaultTlsFeature(CaTlsFeature):
+class VaultTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
     name = "tls.vault"
@@ -230,7 +239,7 @@ class VaultTlsFeature(CaTlsFeature):
 
     def config_type(self) -> type | None:
         """Return the config type for the feature."""
-        return CaTlsFeatureConfig
+        return VaultTlsFeatureConfig
 
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
@@ -305,10 +314,10 @@ class VaultTlsFeature(CaTlsFeature):
         """Enable TLS Vault feature."""
         # Check if vault is enabled
 
-        self.pre_enable(deployment, CaTlsFeatureConfig, show_hints)
+        self.pre_enable(deployment, VaultTlsFeatureConfig, show_hints)
         self.enable_feature(
             deployment,
-            CaTlsFeatureConfig(ca=ca, ca_chain=ca_chain, endpoints=endpoints),
+            VaultTlsFeatureConfig(ca=ca, ca_chain=ca_chain, endpoints=endpoints),
             show_hints,
         )
 
@@ -325,7 +334,7 @@ class VaultTlsFeature(CaTlsFeature):
         return ["manual-tls-certificates"]
 
     def set_tfvars_on_enable(
-        self, deployment: Deployment, config: CaTlsFeatureConfig
+        self, deployment: Deployment, config: VaultTlsFeatureConfig
     ) -> dict:
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
