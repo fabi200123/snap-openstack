@@ -11,7 +11,14 @@ from rich.status import Status
 from sunbeam.clusterd.client import Client
 from sunbeam.clusterd.service import NodeNotExistInClusterException
 from sunbeam.core import questions
-from sunbeam.core.common import BaseStep, Result, ResultType, Role, SunbeamException
+from sunbeam.core.common import (
+    BaseStep,
+    Result,
+    ResultType,
+    Role,
+    SunbeamException,
+    read_config,
+)
 from sunbeam.core.deployment import Deployment, Networks
 from sunbeam.core.juju import (
     ActionFailedException,
@@ -22,6 +29,7 @@ from sunbeam.core.juju import (
     run_sync,
 )
 from sunbeam.core.manifest import Manifest
+from sunbeam.core.openstack import DEFAULT_REGION, REGION_CONFIG_KEY
 from sunbeam.core.steps import (
     AddMachineUnitsStep,
     DeployMachineApplicationStep,
@@ -156,6 +164,9 @@ class DeployMicrocephApplicationStep(DeployMachineApplicationStep):
                 "enable-rgw": "*",
                 "namespace-projects": True,
                 "default-pool-size": ceph_replica_scale(len(storage_nodes)),
+                "region": read_config(self.client, REGION_CONFIG_KEY).get(
+                    "region", DEFAULT_REGION
+                ),
             },
         }
 

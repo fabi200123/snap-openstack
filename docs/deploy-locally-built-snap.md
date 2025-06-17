@@ -47,6 +47,7 @@ sudo snap connections openstack
 sudo snap connect openstack:juju-bin juju:juju-bin
 sudo snap connect openstack:dot-local-share-juju
 sudo snap connect openstack:dot-config-openstack
+sudo snap connect openstack:dot-local-share-openstack
 ```
 
 ## Continue deployment

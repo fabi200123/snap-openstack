@@ -22,12 +22,12 @@ from sunbeam.core.k8s import (
     METALLB_IP_ANNOTATION,
 )
 from sunbeam.core.manifest import Manifest
+from sunbeam.core.openstack import REGION_CONFIG_KEY
 from sunbeam.core.terraform import TerraformException
 from sunbeam.steps.openstack import (
     DATABASE_MEMORY_KEY,
     DEFAULT_STORAGE_MULTI_DATABASE,
     DEFAULT_STORAGE_SINGLE_DATABASE,
-    REGION_CONFIG_KEY,
     DeployControlPlaneStep,
     OpenStackPatchLoadBalancerServicesIPPoolStep,
     OpenStackPatchLoadBalancerServicesIPStep,
