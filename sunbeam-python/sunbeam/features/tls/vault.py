@@ -208,7 +208,6 @@ class ConfigureVaultCAStep(BaseStep):
                 "ca-chain": self.ca_chain,
                 "ca-certificate": self.ca_cert,
                 "certificate-signing-request": str(csr),
-                "unit-name": request.get("unit"),
             }
 
             LOG.debug(f"Running action {action_cmd} with params {action_params}")
