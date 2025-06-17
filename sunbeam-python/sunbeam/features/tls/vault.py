@@ -10,8 +10,10 @@ import click
 import yaml
 from packaging.version import Version
 from rich.console import Console
+from rich.status import Status
 from rich.table import Table
 
+from sunbeam.clusterd.client import Client
 from sunbeam.clusterd.service import (
     ConfigItemNotFoundException,
 )
@@ -19,6 +21,9 @@ from sunbeam.core import questions
 from sunbeam.core.common import (
     FORMAT_TABLE,
     FORMAT_YAML,
+    BaseStep,
+    Result,
+    ResultType,
     read_config,
     run_plan,
     str_presenter,
@@ -39,6 +44,9 @@ from sunbeam.core.manifest import (
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.features.interface.utils import (
+    encode_base64_as_string,
+    get_subject_from_csr,
+    is_certificate_valid,
     validate_ca_certificate,
     validate_ca_chain,
 )
@@ -49,7 +57,6 @@ from sunbeam.features.interface.v1.openstack import (
 from sunbeam.features.tls.ca import (
     CaTlsFeatureConfig,
     CaTlsFeature,
-    ConfigureCAStep,
 )
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
@@ -63,6 +70,156 @@ CA_APP_NAME = "vault"
 LOG = logging.getLogger(__name__)
 console = Console()
 ConfigType = typing.TypeVar("ConfigType", bound=FeatureConfig)
+
+
+class ConfigureVaultCAStep(BaseStep):
+    """Configure CA certificates."""
+
+    _CONFIG = "FeatureCACertificatesConfig"
+
+    def __init__(
+        self,
+        client: Client,
+        jhelper: JujuHelper,
+        ca_cert: str,
+        ca_chain: str,
+        deployment_preseed: dict | None = None,
+    ):
+        super().__init__("Configure CA certs", "Configuring CA certificates")
+        self.client = client
+        self.jhelper = jhelper
+        self.ca_cert = ca_cert
+        self.ca_chain = ca_chain
+        self.preseed = deployment_preseed or {}
+        self.app = CA_APP_NAME
+        self.model = OPENSTACK_MODEL
+        self.process_certs: dict = {}
+
+    def has_prompts(self) -> bool:
+        """Returns true if the step has prompts that it can ask the user."""
+        return True
+
+    def prompt(
+        self,
+        console: Console | None = None,
+        show_hint: bool = False,
+    ) -> None:
+        """Prompt the user for certificates.
+
+        Prompts the user for required information for cert configuration.
+
+        :param console: the console to prompt on
+        :type console: rich.console.Console (Optional)
+        """
+        action_cmd = "get-outstanding-certificate-requests"
+        # let exception propagate, since they are SunbeamException
+        # they will be caught cleanly
+        action_result = get_outstanding_certificate_requests(
+            self.app, self.model, self.jhelper
+        )
+
+        LOG.debug(f"Result from action {action_cmd}: {action_result}")
+        if action_result.get("return-code", 0) > 1:
+            raise click.ClickException(
+                "Unable to get outstanding certificate requests from CA"
+            )
+
+        certs_to_process = json.loads(action_result.get("result", "[]"))
+        if not certs_to_process:
+            LOG.debug("No outstanding certificates to process")
+            return
+
+        variables = questions.load_answers(self.client, self._CONFIG)
+        variables.setdefault("certificates", {})
+        self.preseed.setdefault("certificates", {})
+
+        for record in certs_to_process:
+            unit_name = record.get("unit_name")
+            csr = record.get("csr")
+            app = record.get("application_name")
+            relation_id = record.get("relation_id")
+            if not unit_name:
+                unit_name = str(relation_id)
+
+            # Each unit can have multiple CSRs
+            subject = get_subject_from_csr(csr)
+            if not subject:
+                raise click.ClickException(
+                    f"Not a valid CSR for unit {unit_name}")
+
+            cert_questions = certificate_questions(unit_name, subject)
+            certificates_bank = questions.QuestionBank(
+                questions=cert_questions,
+                console=console,
+                preseed=self.preseed.get("certificates", {}).get(subject),
+                previous_answers=variables.get("certificates", {}).get(subject),
+                show_hint=show_hint,
+            )
+            cert = certificates_bank.certificate.ask()
+            if not cert or not is_certificate_valid(cert):
+                raise click.ClickException("Not a valid certificate")
+
+            self.process_certs[subject] = {
+                "app": app,
+                "unit": unit_name,
+                "relation_id": relation_id,
+                "csr": csr,
+                "certificate": cert,
+            }
+            variables["certificates"].setdefault(subject, {})
+            variables["certificates"][subject]["certificate"] = cert
+
+        questions.write_answers(self.client, self._CONFIG, variables)
+
+    def is_skip(self, status: Status | None = None) -> Result:
+        """Determines if the step should be skipped or not.
+
+        :return: ResultType.SKIPPED if the Step should be skipped,
+                ResultType.COMPLETED or ResultType.FAILED otherwise
+        """
+        return Result(ResultType.COMPLETED)
+
+    def run(self, status: Status | None = None) -> Result:
+        """Run configure steps."""
+        action_cmd = "provide-certificate"
+        try:
+            unit = run_sync(self.jhelper.get_leader_unit(self.app, self.model))
+        except LeaderNotFoundException as e:
+            LOG.debug(f"Unable to get {self.app} leader")
+            return Result(ResultType.FAILED, str(e))
+
+        LOG.debug(f"Process certs: {self.process_certs}")
+        for subject, request in self.process_certs.items():
+            csr = request.get("csr")
+            csr = encode_base64_as_string(csr)
+            if not csr:
+                return Result(ResultType.FAILED)
+
+            action_params = {
+                "relation-id": request.get("relation_id"),
+                "certificate": request.get("certificate"),
+                "ca-chain": self.ca_chain,
+                "ca-certificate": self.ca_cert,
+                "certificate-signing-request": str(csr),
+                "unit-name": request.get("unit"),
+            }
+
+            LOG.debug(f"Running action {action_cmd} with params {action_params}")
+            try:
+                action_result = run_sync(
+                    self.jhelper.run_action(unit, self.model, action_cmd, action_params)
+                )
+            except ActionFailedException as e:
+                LOG.debug(f"Running action {action_cmd} on {unit} with params {action_params} failed")
+                return Result(ResultType.FAILED, str(e))
+
+            LOG.debug(f"Result from action {action_cmd}: {action_result}")
+            if action_result.get("return-code", 0) > 1:
+                return Result(
+                    ResultType.FAILED, f"Action {action_cmd} on {unit} returned error"
+                )
+
+        return Result(ResultType.COMPLETED)
 
 
 class VaultTlsFeature(CaTlsFeature):
@@ -301,7 +458,7 @@ class VaultTlsFeature(CaTlsFeature):
         jhelper = JujuHelper(deployment.get_connected_controller())
         plan = [
             AddManifestStep(client, manifest_path),
-            ConfigureCAStep(
+            ConfigureVaultCAStep(
                 client,
                 jhelper,
                 ca,
