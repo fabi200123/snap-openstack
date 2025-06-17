@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: 2025 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
 import json
 import logging
 import typing
+import re
 from pathlib import Path
 
 import click
@@ -201,11 +203,13 @@ class ConfigureVaultCAStep(BaseStep):
             csr = encode_base64_as_string(csr)
             if not csr:
                 return Result(ResultType.FAILED)
+            new_ca_chain = regenerate_ca_chain(
+                self.ca_chain, request.get("certificate")
+            )
 
             action_params = {
-                "relation-id": request.get("relation_id"),
                 "certificate": request.get("certificate"),
-                "ca-chain": self.ca_chain,
+                "ca-chain": str(new_ca_chain),
                 "ca-certificate": self.ca_cert,
                 "certificate-signing-request": str(csr),
             }
@@ -568,3 +572,29 @@ class VaultTlsFeature(TlsFeature):
             raise click.ClickException(
                 "Cannot enable TLS Vault as TLS CA is already enabled."
             )
+
+
+def regenerate_ca_chain(old_chain_b64: str, new_cert_b64: str) -> str:
+    """
+    Combine the first certificate from old_chain_b64 with the new certificate in new_cert_b64,
+    returning a Base64-encoded PEM chain.
+    """
+    # 1. Decode inputs
+    old_chain_pem = base64.b64decode(old_chain_b64)
+    new_cert_pem = base64.b64decode(new_cert_b64)
+
+    # 2. Extract the first certificate (including BEGIN/END lines)
+    all_certs = re.findall(
+        b"(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)",
+        old_chain_pem,
+        flags=re.DOTALL
+    )
+    if not all_certs:
+        raise ValueError("No PEM certificates found in old_chain_b64")
+    bottom_cert_pem = all_certs[-1]
+
+    # 3. Combine them (ensure a newline between)
+    combined = bottom_cert_pem.rstrip(b"\n") + b"\n" + new_cert_pem.strip(b"\n") + b"\n"
+
+    # 4. Re-encode to Base64 (no line wraps)
+    return base64.b64encode(combined).decode('ascii')
