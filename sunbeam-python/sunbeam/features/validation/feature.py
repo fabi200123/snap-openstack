@@ -338,9 +338,15 @@ class ValidationFeature(OpenStackControlPlaneFeature):
                     )
                 )
             except (ActionFailedException, UnitNotFoundException) as e:
+                LOG.debug(
+                    "Error running action %s on %s", action_name, unit, exc_info=True
+                )
                 raise click.ClickException(str(e))
 
             if action_result.get("return-code", 0) > 1:
+                LOG.debug(
+                    "Action %s on %s failed: %s", action_name, unit, action_result
+                )
                 message = f"Unable to run action: {action_name}"
                 raise click.ClickException(message)
 
