@@ -512,14 +512,40 @@ class VaultTlsFeature(CaTlsFeature):
                 "Vault first.")
         return False
 
+    def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
+        """Return model relations for the provided endpoints."""
+        relations = []
+        model_status = run_sync(self.jhelper.get_model_status(model))
+        model_relations = [r.get("key") for r in model_status.get("relations", {})]
+        for endpoint in endpoints:
+            for relation in model_relations:
+                if endpoint in relation:
+                    relations.append(tuple(relation.split(" ")))
+                    break
+
+        return relations
+
     def is_tls_ca_enabled(self, jhelper: JujuHelper) -> bool:
-        """Check if Vault application is active."""
+        """Check if TLS CA feature was enabled."""
         model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
         try:
-            _ = run_sync(jhelper.get_application(
+            tls_app = run_sync(jhelper.get_application(
                 "manual-tls-certificates", model))
         except SunbeamException:
             return True
+        relations = self._get_relations(
+            OPENSTACK_MODEL, tls_app.get("endpoints", []))
+        if not relations:
+            LOG.debug("No relations found for TLS CA endpoints")
+            run_sync(model.disconnect())
+            return True
+        # Check for relation between manual-tls-certificates:certificates and traefik, traefik-public, or traefik-rgw
+        cert_apps = ["traefik", "traefik-public", "traefik-rgw"]
+        for relation in relations:
+            if ("manual-tls-certificates:certificates" in relation and any(
+                 app in relation for app in cert_apps)):
+                run_sync(model.disconnect())
+                return True
         run_sync(model.disconnect())
         return False
 
