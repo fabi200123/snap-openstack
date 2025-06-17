@@ -243,7 +243,7 @@ class VaultTlsFeature(TlsFeature):
         """Feature software configuration."""
         return SoftwareConfig(
             charms={"manual-tls-certificates": CharmManifest(
-                channel="1/edge", revision="203")}
+                channel="1/edge")}
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:
