@@ -91,7 +91,7 @@ class ConfigureVaultCAStep(BaseStep):
         self.ca_cert = ca_cert
         self.ca_chain = ca_chain
         self.preseed = deployment_preseed or {}
-        self.app = CA_APP_NAME
+        self.app = "manual-tls-certificates"
         self.model = OPENSTACK_MODEL
         self.process_certs: dict = {}
 
