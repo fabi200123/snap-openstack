@@ -29,6 +29,7 @@ from sunbeam.core.common import (
     run_plan,
     str_presenter,
     SunbeamException,
+    TlsFeatureGroup,
 )
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import (
@@ -236,7 +237,8 @@ class ConfigureVaultCAStep(BaseStep):
 class VaultTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
-    name = "tls.vault"
+    feature_key = "tls.vault"
+    group = TlsFeatureGroup
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:

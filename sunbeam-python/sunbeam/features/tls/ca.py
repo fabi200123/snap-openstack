@@ -57,6 +57,7 @@ from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
     TlsFeature,
     TlsFeatureConfig,
+    TlsFeatureGroup,
     certificate_questions,
     get_outstanding_certificate_requests,
 )
@@ -226,7 +227,8 @@ class ConfigureCAStep(BaseStep):
 class CaTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
-    name = "tls.ca"
+    feature_key = "tls.ca"
+    group = TlsFeatureGroup
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:
