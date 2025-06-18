@@ -55,7 +55,7 @@ from sunbeam.features.interface.v1.openstack import (
 )
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
-    TlsFeature,
+    TlsCAFeature,
     TlsFeatureConfig,
     TlsFeatureGroup,
     certificate_questions,
@@ -224,7 +224,7 @@ class ConfigureCAStep(BaseStep):
         return Result(ResultType.COMPLETED)
 
 
-class CaTlsFeature(TlsFeature):
+class CaTlsFeature(TlsCAFeature):
     version = Version("0.0.1")
 
     feature_key = "tls.ca"

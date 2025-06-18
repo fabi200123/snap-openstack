@@ -57,7 +57,7 @@ from sunbeam.features.interface.v1.openstack import (
 )
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
-    TlsFeature,
+    TlsVaultFeature,
     TlsFeatureConfig,
     TlsFeatureGroup,
     certificate_questions,
@@ -234,7 +234,7 @@ class ConfigureVaultCAStep(BaseStep):
         return Result(ResultType.COMPLETED)
 
 
-class VaultTlsFeature(TlsFeature):
+class VaultTlsFeature(TlsVaultFeature):
     version = Version("0.0.1")
 
     feature_key = "tls.vault"

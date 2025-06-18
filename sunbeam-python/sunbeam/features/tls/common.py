@@ -246,13 +246,13 @@ class TlsCAFeature(OpenStackControlPlaneFeature):
         update_config(deployment.get_client(), CERTIFICATE_FEATURE_KEY, {})
 
 
-class TlsFeatureConfig(FeatureConfig):
+class TlsVaultFeatureConfig(FeatureConfig):
     ca: str | None = None
     ca_chain: str | None = None
     endpoints: list[str] = pydantic.Field(default_factory=list)
 
 
-class TlsFeature(OpenStackControlPlaneFeature):
+class TlsVaultFeature(OpenStackControlPlaneFeature):
     """TLS feature backed by HashiCorp Vault intermediary CA."""
     version = Version("0.0.1")
 
