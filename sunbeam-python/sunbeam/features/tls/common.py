@@ -269,7 +269,7 @@ class TlsVaultFeature(OpenStackControlPlaneFeature):
     def pre_enable(
         self,
         deployment: Deployment,
-        config: TlsFeatureConfig,
+        config: TlsVaultFeatureConfig,
         show_hints: bool,
     ) -> None:
         super().pre_enable(deployment, config, show_hints)
@@ -280,7 +280,7 @@ class TlsVaultFeature(OpenStackControlPlaneFeature):
     def post_enable(
         self,
         deployment: Deployment,
-        config: TlsFeatureConfig,
+        config: TlsVaultFeatureConfig,
         show_hints: bool,
     ) -> None:
         j = JujuHelper(deployment.get_connected_controller())
