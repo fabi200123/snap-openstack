@@ -206,7 +206,7 @@ class ConfigureVaultCAStep(BaseStep):
 
             action_params = {
                 "certificate": request.get("certificate"),
-                "ca-chain": self.ca_chain,
+                "ca-chain": self.ca_cert,
                 "ca-certificate": self.ca_cert,
                 "certificate-signing-request": str(csr),
             }
