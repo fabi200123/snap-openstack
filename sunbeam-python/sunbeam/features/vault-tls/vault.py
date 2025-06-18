@@ -29,7 +29,6 @@ from sunbeam.core.common import (
     run_plan,
     str_presenter,
     SunbeamException,
-    TlsFeatureGroup,
 )
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import (
@@ -60,6 +59,7 @@ from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
     TlsFeature,
     TlsFeatureConfig,
+    TlsFeatureGroup,
     certificate_questions,
     get_outstanding_certificate_requests,
 )
