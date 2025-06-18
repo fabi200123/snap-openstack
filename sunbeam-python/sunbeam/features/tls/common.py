@@ -246,13 +246,13 @@ class TlsCAFeature(OpenStackControlPlaneFeature):
         update_config(deployment.get_client(), CERTIFICATE_FEATURE_KEY, {})
 
 
-class TlsVaultFeatureConfig(FeatureConfig):
+class TlsFeatureConfig(FeatureConfig):
     ca: str | None = None
     ca_chain: str | None = None
     endpoints: list[str] = pydantic.Field(default_factory=list)
 
 
-class TlsVaultFeature(OpenStackControlPlaneFeature):
+class TlsFeature(OpenStackControlPlaneFeature):
     """TLS feature backed by HashiCorp Vault intermediary CA."""
     version = Version("0.0.1")
     feature_key = "tls.vault"
@@ -271,7 +271,7 @@ class TlsVaultFeature(OpenStackControlPlaneFeature):
     def pre_enable(
         self,
         deployment: Deployment,
-        config: TlsVaultFeatureConfig,
+        config: TlsFeatureConfig,
         show_hints: bool,
     ) -> None:
         super().pre_enable(deployment, config, show_hints)
@@ -282,7 +282,7 @@ class TlsVaultFeature(OpenStackControlPlaneFeature):
     def post_enable(
         self,
         deployment: Deployment,
-        config: TlsVaultFeatureConfig,
+        config: TlsFeatureConfig,
         show_hints: bool,
     ) -> None:
         j = JujuHelper(deployment.get_connected_controller())
