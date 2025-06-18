@@ -255,8 +255,6 @@ class TlsFeatureConfig(FeatureConfig):
 class TlsFeature(OpenStackControlPlaneFeature):
     """TLS feature backed by HashiCorp Vault intermediary CA."""
     version = Version("0.0.1")
-    feature_key = "tls.vault"
-    group = TlsFeatureGroup
 
     @property
     def ca_cert_name(self) -> str:
