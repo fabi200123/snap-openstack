@@ -165,8 +165,6 @@ class TlsCAFeatureConfig(FeatureConfig):
 class TlsCAFeature(OpenStackControlPlaneFeature):
     """TLS feature backed by OpenSSL CA."""
     version = Version("0.0.1")
-    feature_key = "tls.ca"
-    group = TlsFeatureGroup
 
     @property
     def ca_cert_name(self) -> str:
