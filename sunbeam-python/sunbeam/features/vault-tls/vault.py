@@ -1,11 +1,9 @@
 # SPDX-FileCopyrightText: 2025 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
-import base64
 import json
 import logging
 import typing
-import re
 from pathlib import Path
 
 import click
@@ -161,7 +159,8 @@ class ConfigureVaultCAStep(BaseStep):
                 questions=cert_questions,
                 console=console,
                 preseed=self.preseed.get("certificates", {}).get(subject),
-                previous_answers=variables.get("certificates", {}).get(subject),
+                previous_answers=variables.get(
+                    "certificates", {}).get(subject),
                 show_hint=show_hint,
             )
             cert = certificates_bank.certificate.ask()
@@ -211,19 +210,24 @@ class ConfigureVaultCAStep(BaseStep):
                 "certificate-signing-request": str(csr),
             }
 
-            LOG.debug(f"Running action {action_cmd} with params {action_params}")
+            LOG.debug(
+                f"Running action {action_cmd} with params {action_params}")
             try:
                 action_result = run_sync(
-                    self.jhelper.run_action(unit, self.model, action_cmd, action_params)
+                    self.jhelper.run_action(unit, self.model,
+                                            action_cmd, action_params)
                 )
             except ActionFailedException as e:
-                LOG.debug(f"Running action {action_cmd} on {unit} with params {action_params} failed")
+                LOG.debug(
+                    f"Running action {action_cmd} on {unit} with params \
+                        {action_params} failed")
                 return Result(ResultType.FAILED, str(e))
 
             LOG.debug(f"Result from action {action_cmd}: {action_result}")
             if action_result.get("return-code", 0) > 1:
                 return Result(
-                    ResultType.FAILED, f"Action {action_cmd} on {unit} returned error"
+                    ResultType.FAILED, f"Action {action_cmd} on {unit} \
+                        returned error"
                 )
 
         return Result(ResultType.COMPLETED)
@@ -315,7 +319,8 @@ class VaultTlsFeature(TlsFeature):
         self.pre_enable(deployment, VaultTlsFeatureConfig, show_hints)
         self.enable_feature(
             deployment,
-            VaultTlsFeatureConfig(ca=ca, ca_chain=ca_chain, endpoints=endpoints),
+            VaultTlsFeatureConfig(
+                ca=ca, ca_chain=ca_chain, endpoints=endpoints),
             show_hints,
         )
 
@@ -410,7 +415,8 @@ class VaultTlsFeature(TlsFeature):
         csrs = {
             relation: csr
             for record in certs_to_process
-            if (relation := str(record.get("relation_id"))) and (csr := record.get("csr"))
+            if (relation := str(record.get("relation_id"))) and (
+                csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
@@ -521,7 +527,8 @@ class VaultTlsFeature(TlsFeature):
         """Return model relations for the provided endpoints."""
         relations = []
         model_status = run_sync(self.jhelper.get_model_status(model))
-        model_relations = [r.get("key") for r in model_status.get("relations", {})]
+        model_relations = [r.get("key") for r in model_status.get(
+            "relations", {})]
         for endpoint in endpoints:
             for relation in model_relations:
                 if endpoint in relation:
@@ -544,7 +551,8 @@ class VaultTlsFeature(TlsFeature):
             LOG.debug("No relations found for TLS CA endpoints")
             run_sync(model.disconnect())
             return True
-        # Check for relation between manual-tls-certificates:certificates and traefik, traefik-public, or traefik-rgw
+        # Check for relation between manual-tls-certificates:certificates
+        # and traefik, traefik-public, or traefik-rgw
         cert_apps = ["traefik", "traefik-public", "traefik-rgw"]
         for relation in relations:
             if ("manual-tls-certificates:certificates" in relation and any(
