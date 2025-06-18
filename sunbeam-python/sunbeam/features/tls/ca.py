@@ -56,7 +56,7 @@ from sunbeam.features.interface.v1.openstack import (
 from sunbeam.features.tls.common import (
     INGRESS_CHANGE_APPLICATION_TIMEOUT,
     TlsCAFeature,
-    TlsFeatureConfig,
+    TlsCAFeatureConfig,
     TlsFeatureGroup,
     certificate_questions,
     get_outstanding_certificate_requests,
@@ -73,7 +73,7 @@ class _Certificate(pydantic.BaseModel):
     certificate: str
 
 
-class CaTlsFeatureConfig(TlsFeatureConfig):
+class CaTlsFeatureConfig(TlsCAFeatureConfig):
     certificates: dict[str, _Certificate] = {}
 
 
