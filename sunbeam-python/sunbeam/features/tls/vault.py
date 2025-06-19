@@ -505,49 +505,58 @@ class VaultTlsFeature(TlsFeature):
         }
 
     def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
-        """Check if Vault is deployed, initialized, and authorized."""
+        """Check if Vault is deployed, initialized, and authorized (by inspecting a unit's workload_status_message)."""
         model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
         try:
-            leader = run_sync(
-                jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
-            )
+            # 1) Ensure the vault app exists
+            app = run_sync(jhelper.get_application(CA_APP_NAME, model))
         except SunbeamException:
+            run_sync(model.disconnect())
             raise click.ClickException(
                 "Cannot enable TLS Vault because Vault is not deployed. "
                 "Please deploy Vault first."
             )
 
-        vhelper = VaultHelper(jhelper)
-
-        try:
-            vault_status = vhelper.get_vault_status(leader)
-        except VaultCommandFailedException as e:
-            err = str(e).lower()
-            if "authorize" in err:
-                raise click.ClickException(
-                    "Vault is deployed but this client is unauthorized. "
-                    "Please authorize the Vault charm (`sunbeam vault authorize-charm`)."
-                )
-            else:
-                raise click.ClickException(f"Error querying Vault status: {e}")
-        except (TimeoutException, JujuException) as e:
-            raise click.ClickException(f"Unable to contact Vault: {e}")
-        finally:
+        # 2) Pull the first unit to inspect its workload status/message
+        units = app.units  # libjuju.Unit objects
+        if not units:
             run_sync(model.disconnect())
+            raise click.ClickException("Vault has no units yet - still deploying.")
 
-        if not vault_status.get("initialized", False):
-            raise click.ClickException(
-                "Vault is deployed but uninitialized. "
-                "Please run `sunbeam vault init` first."
-            )
+        unit = units[0]
+        status = unit.workload_status                 # e.g. "active" or "blocked"
+        message = unit.workload_status_message or ""  # where "Please authorize charm..." lives
+        run_sync(model.disconnect())
 
-        if vault_status.get("sealed", True):
-            raise click.ClickException(
-                "Vault is initialized but still sealed. "
-                "Please unseal Vault before proceeding."
-            )
+        # 3) If active, good to go
+        if status == "active":
+            return True
 
-        return True
+        # 4) If blocked, split reasons based on the actual unit message
+        if status == "blocked":
+            msg_lc = message.lower()
+
+            if "uninitialized" in msg_lc:
+                raise click.ClickException(
+                    "Vault is deployed but uninitialized. "
+                    "Please run `vault operator init` first."
+                )
+            if "authorize" in msg_lc or "permission denied" in msg_lc:
+                raise click.ClickException(
+                    "Vault is deployed and initialized but unauthorized. "
+                    "Please run `sunbeam vault authorize-charm` to give Juju the Vault token."
+                )
+            if "sealed" in msg_lc:
+                raise click.ClickException(
+                    "Vault is initialized but still sealed. "
+                    "Please run `sunbeam vault unseal` (or `vault operator unseal`) first."
+                )
+
+            # fallback to whatever the charm is telling us
+            raise click.ClickException(f"Vault is blocked: {message}")
+
+        # 5) Any other status (maintenance, error, unknown) -> not ready
+        return False
 
     def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
         """Return model relations for the provided endpoints."""
