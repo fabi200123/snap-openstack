@@ -271,7 +271,7 @@ class CaTlsFeature(TlsCAFeature):
         )
         return content
 
-    @click.command()
+    @TlsFeatureGroup.ca.command("enable")
     @click.option(
         "--endpoint",
         "endpoints",
