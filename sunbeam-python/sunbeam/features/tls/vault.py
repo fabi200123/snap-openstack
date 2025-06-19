@@ -35,8 +35,10 @@ from sunbeam.core.common import (
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import (
     ActionFailedException,
+    JujuException,
     JujuHelper,
     LeaderNotFoundException,
+    TimeoutException,
     run_sync,
 )
 from sunbeam.core.manifest import (
@@ -63,6 +65,10 @@ from sunbeam.features.tls.common import (
     TlsFeatureConfig,
     certificate_questions,
     get_outstanding_certificate_requests,
+)
+from sunbeam.features.vault.feature import (
+    VaultHelper,
+    VaultCommandFailedException,
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
@@ -499,38 +505,49 @@ class VaultTlsFeature(TlsFeature):
         }
 
     def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
-        """Check if Vault application is active."""
+        """Check if Vault is deployed, initialized, and authorized."""
         model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
         try:
-            application = run_sync(jhelper.get_application("vault", model))
+            leader = run_sync(
+                jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
+            )
         except SunbeamException:
             raise click.ClickException(
-                "Cannot enable TLS Vault as Vault is not enabled."
-                "Enable Vault first.")
-        status = application.status
+                "Cannot enable TLS Vault because Vault is not deployed. "
+                "Please deploy Vault first."
+            )
 
-        message = application.status_message
-        LOG.debug(f"Vault application status: {status}, message: {message}")
-        run_sync(model.disconnect())
+        vhelper = VaultHelper(jhelper)
 
-        if status == "active":
-            return True
-        elif status == "blocked":
-            if "uninitialized" in message:
+        try:
+            vault_status = vhelper.get_vault_status(leader)
+        except VaultCommandFailedException as e:
+            err = str(e).lower()
+            if "authorize" in err:
                 raise click.ClickException(
-                    "Vault is deployed but uninitialized. "
-                    "Please initialize it first."
-                )
-            elif "unauthorized" in message or "permission denied" in message:
-                raise click.ClickException(
-                    "Vault is deployed and initialized but unauthorized. "
-                    "Please authorize it first."
+                    "Vault is deployed but this client is unauthorized. "
+                    "Please authorize the Vault charm (`sunbeam vault authorize-charm`)."
                 )
             else:
-                # Fallback for other blocked reasons
-                raise click.ClickException(f"Vault is blocked: \
-                                           {application.status_message}")
-        return False
+                raise click.ClickException(f"Error querying Vault status: {e}")
+        except (TimeoutException, JujuException) as e:
+            raise click.ClickException(f"Unable to contact Vault: {e}")
+        finally:
+            run_sync(model.disconnect())
+
+        if not vault_status.get("initialized", False):
+            raise click.ClickException(
+                "Vault is deployed but uninitialized. "
+                "Please run `sunbeam vault init` first."
+            )
+
+        if vault_status.get("sealed", True):
+            raise click.ClickException(
+                "Vault is initialized but still sealed. "
+                "Please unseal Vault before proceeding."
+            )
+
+        return True
 
     def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
         """Return model relations for the provided endpoints."""
