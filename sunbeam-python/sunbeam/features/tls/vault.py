@@ -508,20 +508,36 @@ class VaultTlsFeature(TlsFeature):
                 "Cannot enable TLS Vault as Vault is not enabled."
                 "Enable Vault first.")
         status = application.status
+
+        message = application.status_message
+        LOG.debug(f"Vault application status: {status}, message: {message}")
         run_sync(model.disconnect())
+
         if status == "active":
             return True
         elif status == "blocked":
-            raise click.ClickException(
-                "Vault application is blocked. Initialize and authorize "
-                "Vault first.")
+            if "uninitialized" in message:
+                raise click.ClickException(
+                    "Vault is deployed but uninitialized. "
+                    "Please initialize it first."
+                )
+            elif "unauthorized" in message or "permission denied" in message:
+                raise click.ClickException(
+                    "Vault is deployed and initialized but unauthorized. "
+                    "Please authorize it first."
+                )
+            else:
+                # Fallback for other blocked reasons
+                raise click.ClickException(f"Vault is blocked: \
+                                           {application.status_message}")
         return False
 
     def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
         """Return model relations for the provided endpoints."""
         relations = []
         model_status = run_sync(self.jhelper.get_model_status(model))
-        model_relations = [r.get("key") for r in model_status.get("relations", {})]
+        model_relations = [r.get("key") for r in model_status.get(
+            "relations", {})]
         for endpoint in endpoints:
             for relation in model_relations:
                 if endpoint in relation:
