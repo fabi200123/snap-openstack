@@ -50,12 +50,12 @@ class TlsFeatureGroup(BaseFeatureGroup):
     @click.group(name="ca")
     @pass_method_obj
     def ca(self, deployment: Deployment) -> None:
-        """Use the built-in OpenSSL CA provider."""
+        """Use the Manual-TLS-Certificates charm as a CA provider."""
 
     @click.group(name="vault")
     @pass_method_obj
     def vault(self, deployment: Deployment) -> None:
-        """Use HashiCorp Vault as an intermediary CA."""
+        """Use Vault K8s as an intermediary CA."""
 
 
 class _AddCACertsStep(BaseStep):
@@ -164,7 +164,10 @@ class TlsCAFeatureConfig(FeatureConfig):
 
 class TlsCAFeature(OpenStackControlPlaneFeature):
     """TLS feature backed by OpenSSL CA."""
-    version = Version("0.0.1")
+
+    feature_key = "tls.ca"
+    group       = TlsFeatureGroup
+    version     = Version("0.0.1")
 
     @property
     def ca_cert_name(self) -> str:
@@ -252,7 +255,9 @@ class TlsVaultFeatureConfig(FeatureConfig):
 
 class TlsVaultFeature(OpenStackControlPlaneFeature):
     """TLS feature backed by HashiCorp Vault intermediary CA."""
-    version = Version("0.0.1")
+    feature_key = "tls.vault"
+    group       = TlsFeatureGroup
+    version     = Version("0.0.1")
 
     @property
     def ca_cert_name(self) -> str:
