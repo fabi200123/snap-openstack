@@ -262,7 +262,7 @@ class VaultTlsFeature(TlsFeature):
             section_description="TLS Certificates",
             comment_out=True,
         )
-        return content
+        return [content]
 
     @click.command()
     @click.option(
@@ -271,7 +271,7 @@ class VaultTlsFeature(TlsFeature):
         multiple=True,
         default=["public"],
         type=click.Choice(["public", "internal", "rgw"], case_sensitive=False),
-        help="Specify endpoints to apply tls.",
+        help="Specify which endpoints to apply TLS for.",
     )
     @click.option(
         "--ca-chain",
@@ -298,15 +298,13 @@ class VaultTlsFeature(TlsFeature):
         show_hints: bool,
     ):
         """Enable TLS Vault feature."""
-        # Check if vault is enabled
-
-        self.pre_enable(deployment, VaultTlsFeatureConfig, show_hints)
-        self.enable_feature(
-            deployment,
-            VaultTlsFeatureConfig(
-                ca=ca, ca_chain=ca_chain, endpoints=endpoints),
-            show_hints,
+        config = VaultTlsFeatureConfig(
+            ca=ca,
+            ca_chain=ca_chain,
+            endpoints=endpoints,
         )
+        self.pre_enable(deployment, config, show_hints)
+        self.enable_feature(deployment, config, show_hints)
 
     @click.command()
     @click_option_show_hints
@@ -326,7 +324,7 @@ class VaultTlsFeature(TlsFeature):
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
             "traefik-to-tls-provider": CA_APP_NAME,
-            "manual-tls-certificates-channel": "1/edge"}
+            "manual-tls-certificates-channel": "1/stable"}
         if "public" in config.endpoints:
             tfvars.update({"enable-tls-for-public-endpoint": True})
         if "internal" in config.endpoints:
@@ -530,7 +528,6 @@ class VaultTlsFeature(TlsFeature):
             )
 
         if status == "blocked":
-            # TODO: Investigate if this is a bug in vault charm
             # There is a case where after vault unseal, the vault
             # application is still in blocked state, but shows the message
             # "Please initialize Vault or integrate
@@ -559,22 +556,68 @@ class VaultTlsFeature(TlsFeature):
         return relations
 
     def pre_enable(
-        self, deployment: Deployment,
-        config: TlsFeatureConfig, show_hints: bool
+        self,
+        deployment: Deployment,
+        config: VaultTlsFeatureConfig,
+        show_hints: bool,
     ) -> None:
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
 
-        provider_config = self.provider_config(deployment)
-
-        provider = provider_config.get("provider")
-        if provider and provider != self.name:
-            raise Exception(
-                f"Certificate provider already set to {provider!r}")
-
         jhelper = JujuHelper(deployment.get_connected_controller())
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
-                "Cannot enable TLS Vault as Vault is not enabled."
+                "Cannot enable TLS Vault as Vault is not enabled. "
                 "Enable Vault first."
             )
+
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        app_map = {
+            "public": "traefik-public",
+            "internal": "traefik",
+            "rgw": "traefik-rgw",
+        }
+        external_map: dict[str, str] = {}
+        missing: list[str] = []
+
+        for endpoint in config.endpoints:
+            app_name = app_map.get(endpoint)
+            if not app_name:
+                LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
+                continue
+
+            app = run_sync(jhelper.get_application(app_name, model))
+            cfg = run_sync(app.get_config())
+            hostname = cfg.get("external_hostname", {}).get("value")
+            if not hostname:
+                missing.append(endpoint)
+            else:
+                external_map[endpoint] = hostname
+
+        if missing:
+            raise click.ClickException(
+                "TLS Vault requires every endpoint to have an external_hostname;\n"
+                f"the following endpoint(s) were missing one: {', '.join(missing)}"
+            )
+
+        domains = {
+            h.split(".", 1)[1]
+            for h in external_map.values()
+            if "." in h
+        }
+        if len(domains) != 1:
+            raise click.ClickException(
+                "Traefik charms must share one domain; found: "
+                f"{', '.join(external_map.values())}"
+            )
+        common_domain = domains.pop()
+
+        vault_app = run_sync(jhelper.get_application(CA_APP_NAME, model))
+        current = run_sync(vault_app.get_config()).get("common_name", {}).get("value")
+        if current != common_domain:
+            try:
+                run_sync(vault_app.set_config({"common_name": common_domain}))
+                console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
+            except Exception as e:
+                LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
+                raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
