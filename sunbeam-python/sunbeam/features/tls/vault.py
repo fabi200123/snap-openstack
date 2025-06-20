@@ -518,18 +518,23 @@ class VaultTlsFeature(TlsFeature):
             )
 
         vhelper = VaultHelper(jhelper)
+        app = run_sync(jhelper.get_application(CA_APP_NAME, model))
+        unit = app.units[0] if app.units else None
+        if not unit:
+            raise click.ClickException(
+                "Vault application has no units. "
+                "Please deploy Vault first."
+            )
+        status = unit.workload_status
+        message = unit.workload_status_message
+
+        if status == "active":
+            return True
 
         try:
             vault_status = vhelper.get_vault_status(leader)
         except VaultCommandFailedException as e:
-            err = str(e).lower()
-            if "authorize" in err:
-                raise click.ClickException(
-                    "Vault is deployed but this client is unauthorized. "
-                    "Please authorize the Vault charm (`sunbeam vault authorize-charm`)."
-                )
-            else:
-                raise click.ClickException(f"Error querying Vault status: {e}")
+            raise click.ClickException(f"Error querying Vault status: {e}")
         except (TimeoutException, JujuException) as e:
             raise click.ClickException(f"Unable to contact Vault: {e}")
         finally:
@@ -547,6 +552,18 @@ class VaultTlsFeature(TlsFeature):
                 "Please unseal Vault before proceeding."
             )
 
+        if status == "blocked":
+            # TODO: Investigate if this is a bug in vault charm
+            # There is a case where after vault unseal, the vault
+            # application is still in blocked state, but shows the message
+            # "Please initialize Vault or integrate
+            # with an auto-unseal provider"
+            if "authorize" in message.lower() or "initialize" in message.lower():
+                raise click.ClickException(
+                    "Vault is not authorized. Please run "
+                    "`sunbeam vault authorize-charm` first."
+                )
+            raise click.ClickException(f"Vault is blocked: {message}")
         return True
 
     def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
