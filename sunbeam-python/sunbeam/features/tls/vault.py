@@ -72,7 +72,7 @@ from sunbeam.features.vault.feature import (
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
-CERTIFICATE_FEATURE_KEY = "TlsProvider"
+CERTIFICATE_FEATURE_KEY = "TlsVaultProvider"
 CA_APP_NAME = "vault"
 LOG = logging.getLogger(__name__)
 console = Console()
