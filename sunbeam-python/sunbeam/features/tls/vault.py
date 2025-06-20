@@ -242,6 +242,11 @@ class VaultTlsFeature(TlsFeature):
     charm_channel = "1/edge"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
+    @click.group(name="vault")
+    @pass_method_obj
+    def vault_group(self) -> None:
+        """Manage CA (HashiCorp Vault)."""
+
     def config_type(self) -> type | None:
         """Return the config type for the feature."""
         return VaultTlsFeatureConfig
@@ -466,7 +471,7 @@ class VaultTlsFeature(TlsFeature):
         """
         return {
             "init": [{"name": self.group.name, "command": self.tls_group}],
-            "init.tls": [{"name": "vault", "command": self.ca_group}],
+            "init.tls": [{"name": "vault", "command": self.vault_group}],
             "init.tls.vault": [
                 {"name": "unit_certs", "command": self.configure},
                 {

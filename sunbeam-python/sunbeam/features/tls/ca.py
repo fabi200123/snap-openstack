@@ -235,6 +235,11 @@ class CaTlsFeature(TlsFeature):
         """Return the config type for the feature."""
         return CaTlsFeatureConfig
 
+    @click.group(name="ca")
+    @pass_method_obj
+    def ca_group(self) -> None:
+        """Manage CA (built-in)."""
+
     def preseed_questions_content(self) -> list:
         """Generate preseed manifest content."""
         certificate_question_bank = questions.QuestionBank(

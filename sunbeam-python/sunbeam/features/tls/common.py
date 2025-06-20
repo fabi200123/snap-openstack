@@ -91,10 +91,6 @@ class TlsFeature(OpenStackControlPlaneFeature):
     def tls_group(self):
         """Manage TLS."""
 
-    @click.group()
-    def ca_group(self):
-        """Manage CA."""
-
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
         LOG.debug(f"[debug] {self.__class__.__name__}.charm_channel = {self.charm_channel}")
