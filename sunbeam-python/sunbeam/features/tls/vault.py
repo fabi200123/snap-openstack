@@ -353,14 +353,6 @@ class VaultTlsFeature(TlsFeature):
         """Set terraform variables to resize the application."""
         return {}
 
-    @click.group()
-    def tls_group(self) -> None:
-        """Manage TLS."""
-
-    @click.group()
-    def ca_group(self) -> None:
-        """Manage CA."""
-
     @click.command()
     @click.option(
         "--format",
