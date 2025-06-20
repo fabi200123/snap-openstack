@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2024 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
 import ipaddress
 import json
 import logging
@@ -1586,6 +1587,11 @@ class PatchCoreDNSStep(BaseStep):
         self.coredns_namespace = "kube-system"
         self.coredns_hpa = "ck-dns-coredns"
         self.timeout = 180  # 3 minutes for helm upgrade
+        self.replica_count = 1
+
+    def compute_coredns_replica_count(self, control_nodes: int) -> int:
+        """Determine replica count for coredns."""
+        return 1 if control_nodes < 3 else 3
 
     def is_skip(self, status: Status | None = None) -> Result:
         """Determines if the step should be skipped or not.
@@ -1603,15 +1609,28 @@ class PatchCoreDNSStep(BaseStep):
             return Result(ResultType.FAILED, str(e))
 
         try:
-            self.kube.get(autoscaling_v2.HorizontalPodAutoscaler, name=self.coredns_hpa)
-            LOG.debug("Horizontal pod autoscaler exists for coredns")
-            return Result(ResultType.SKIPPED)
-        except l_exceptions.ApiError as e:
-            if "not found" in str(e):
+            coredns_hpa = self.kube.get(
+                autoscaling_v2.HorizontalPodAutoscaler, name=self.coredns_hpa
+            )
+            LOG.debug(f"Existing coredns hpa: {coredns_hpa}")
+            coredns_hpa_spec = coredns_hpa.spec
+            if coredns_hpa_spec is None:
+                LOG.debug("Coredns HPA has no spec")
                 return Result(ResultType.COMPLETED)
 
-            LOG.debug("Failed to get coredns hpa", exc_info=True)
-            return Result(ResultType.FAILED, str(e))
+            control_nodes = self.client.cluster.list_nodes_by_role("control")
+            self.replica_count = self.compute_coredns_replica_count(len(control_nodes))
+
+            if self.replica_count == coredns_hpa_spec.minReplicas:
+                return Result(ResultType.SKIPPED)
+        except l_exceptions.ApiError as e:
+            if "not found" not in str(e):
+                LOG.debug("Failed to get coredns hpa", exc_info=True)
+                return Result(ResultType.FAILED, str(e))
+            else:
+                LOG.debug(f"No hpa found for coredns: {str(e)}")
+
+        return Result(ResultType.COMPLETED)
 
     def run(self, status: Status | None) -> Result:
         """Run the step to completion.
@@ -1630,8 +1649,12 @@ class PatchCoreDNSStep(BaseStep):
             LOG.debug(f"Failed to get {self.juju_app_name} leader", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
-        hpa = json.dumps(COREDNS_HPA)
+        hpa_dict = copy.deepcopy(COREDNS_HPA)
+        hpa_dict["minReplicas"] = self.replica_count
+        hpa = json.dumps(hpa_dict)
         resources = json.dumps(COREDNS_RESOURCES)
+        # Note: Applying coredns hpa with modified minReplica will take time
+        # to see the scale in, scale out based on policy defined in COREDNS_HPA
         try:
             cmd_str = (
                 f"k8s helm upgrade -n {self.coredns_namespace} ck-dns "
