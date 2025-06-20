@@ -89,6 +89,7 @@ class TlsFeature(OpenStackControlPlaneFeature):
 
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
+        LOG.debug(f"[debug] {self.__class__.__name__}.charm_channel = {self.charm_channel}")
         return SoftwareConfig(
             charms={"manual-tls-certificates": CharmManifest(
                 channel=self.charm_channel)}
