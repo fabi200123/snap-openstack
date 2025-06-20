@@ -580,42 +580,21 @@ class VaultTlsFeature(TlsFeature):
 
         return relations
 
-    def is_tls_ca_enabled(self, jhelper: JujuHelper) -> bool:
-        """Check if TLS CA feature was enabled."""
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
-        try:
-            tls_app = run_sync(jhelper.get_application(
-                "manual-tls-certificates", model))
-        except SunbeamException:
-            return True
-        relations = self._get_relations(
-            OPENSTACK_MODEL, tls_app.get("endpoints", []))
-        if not relations:
-            LOG.debug("No relations found for TLS CA endpoints")
-            run_sync(model.disconnect())
-            return True
-        # Check for relation between manual-tls-certificates:certificates and traefik, traefik-public, or traefik-rgw
-        cert_apps = ["traefik", "traefik-public", "traefik-rgw"]
-        for relation in relations:
-            if ("manual-tls-certificates:certificates" in relation and any(
-                 app in relation for app in cert_apps)):
-                run_sync(model.disconnect())
-                return True
-        run_sync(model.disconnect())
-        return False
-
     def pre_enable(
-        self, deployment: Deployment, config: ConfigType, show_hints: bool
+        self, deployment: Deployment, config: TlsFeatureConfig, show_hints: bool
     ) -> None:
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
+
+        provider_config = self.provider_config(deployment)
+
+        provider = provider_config.get("provider")
+        if provider and provider != self.name:
+            raise Exception(f"Certificate provider already set to {provider!r}")
+
         jhelper = JujuHelper(deployment.get_connected_controller())
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
                 "Cannot enable TLS Vault as Vault is not enabled."
                 "Enable Vault first."
-            )
-        if not self.is_tls_ca_enabled(jhelper):
-            raise click.ClickException(
-                "Cannot enable TLS Vault as TLS CA is already enabled."
             )
