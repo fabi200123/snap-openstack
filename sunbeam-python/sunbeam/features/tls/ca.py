@@ -234,7 +234,7 @@ class CaTlsFeature(TlsFeature):
         """Return the config type for the feature."""
         return CaTlsFeatureConfig
 
-    @click.group(name="ca")
+    @click.group()
     @pass_method_obj
     def ca_group(self) -> None:
         """Manage CA (built-in)."""

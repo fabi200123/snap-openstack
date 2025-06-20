@@ -241,7 +241,7 @@ class VaultTlsFeature(TlsFeature):
     name = "tls.vault"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
-    @click.group(name="vault")
+    @click.group()
     @pass_method_obj
     def vault_group(self) -> None:
         """Manage CA (HashiCorp Vault)."""
