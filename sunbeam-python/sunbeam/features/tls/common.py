@@ -69,7 +69,6 @@ class TlsFeatureGroup(BaseFeatureGroup):
 class TlsFeature(OpenStackControlPlaneFeature):
     version = Version("0.0.1")
     group = TlsFeatureGroup
-    charm_channel = "latest/stable"
 
     @property
     def ca_cert_name(self) -> str:
@@ -96,7 +95,7 @@ class TlsFeature(OpenStackControlPlaneFeature):
         LOG.debug(f"[debug] {self.__class__.__name__}.charm_channel = {self.charm_channel}")
         return SoftwareConfig(
             charms={"manual-tls-certificates": CharmManifest(
-                channel=self.charm_channel)}
+                channel="latest/stable",)}
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:

@@ -239,7 +239,6 @@ class VaultTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
     name = "tls.vault"
-    charm_channel = "1/edge"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     @click.group(name="vault")
@@ -328,7 +327,7 @@ class VaultTlsFeature(TlsFeature):
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
             "traefik-to-tls-provider": CA_APP_NAME,
-            "manual-tls-certificates-channel": self.charm_channel}
+            "manual-tls-certificates-channel": "1/edge"}
         if "public" in config.endpoints:
             tfvars.update({"enable-tls-for-public-endpoint": True})
         if "internal" in config.endpoints:

@@ -228,7 +228,6 @@ class CaTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
     name = "tls.ca"
-    charm_channel = "latest/stable"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:
