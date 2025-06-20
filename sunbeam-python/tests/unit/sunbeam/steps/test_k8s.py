@@ -1017,9 +1017,52 @@ class TestPatchCoreDNSStep(unittest.TestCase):
         assert result.result_type == ResultType.FAILED
 
     def test_is_skip_hpa_already_exists(self):
+        control_nodes = [
+            {"name": "node1", "machineid": "1"},
+            {"name": "node2", "machineid": "2"},
+        ]
+        self.step.client.cluster.list_nodes_by_role.return_value = control_nodes
+        hpa = Mock()
+        hpa.spec = Mock()
+        hpa.spec.minReplicas = 1
+
         with patch("sunbeam.steps.k8s._get_kube_client", return_value=self.kube):
+            self.kube.get = Mock(return_value=hpa)
             result = self.step.is_skip()
         assert result.result_type == ResultType.SKIPPED
+
+    def test_is_skip_new_control_nodes_added(self):
+        control_nodes = [
+            {"name": "node1", "machineid": "1"},
+            {"name": "node2", "machineid": "2"},
+            {"name": "node3", "machineid": "3"},
+        ]
+        self.step.client.cluster.list_nodes_by_role.return_value = control_nodes
+        hpa = Mock()
+        hpa.spec = Mock()
+        hpa.spec.minReplicas = 1
+
+        with patch("sunbeam.steps.k8s._get_kube_client", return_value=self.kube):
+            self.kube.get = Mock(return_value=hpa)
+            result = self.step.is_skip()
+        assert result.result_type == ResultType.COMPLETED
+        assert self.step.replica_count == 3
+
+    def test_is_skip_control_nodes_removed(self):
+        control_nodes = [
+            {"name": "node1", "machineid": "1"},
+            {"name": "node2", "machineid": "2"},
+        ]
+        self.step.client.cluster.list_nodes_by_role.return_value = control_nodes
+        hpa = Mock()
+        hpa.spec = Mock()
+        hpa.spec.minReplicas = 3
+
+        with patch("sunbeam.steps.k8s._get_kube_client", return_value=self.kube):
+            self.kube.get = Mock(return_value=hpa)
+            result = self.step.is_skip()
+        assert result.result_type == ResultType.COMPLETED
+        assert self.step.replica_count == 1
 
     def test_run(self):
         self.jhelper.run_cmd_on_machine_unit_payload.return_value = {"return-code": 0}
