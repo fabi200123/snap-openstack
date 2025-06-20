@@ -220,6 +220,9 @@ class CoreConfig(pydantic.BaseModel):
     region: str | None = None
     addons: _Addons | None = None
     k8s_addons: _K8sAddons | None = pydantic.Field(default=None, alias="k8s-addons")
+    traefik_endpoints: dict[str, str] | None = pydantic.Field(
+        default=None, alias="traefik-endpoints"
+    )
     user: _User | None = None
     external_network: _ExternalNetwork | None = None
     microceph_config: pydantic.RootModel[dict[str, _HostMicroCephConfig]] | None = None
