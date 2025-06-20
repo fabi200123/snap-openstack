@@ -72,7 +72,7 @@ from sunbeam.features.vault.feature import (
 )
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
-CERTIFICATE_FEATURE_KEY = "TlsVaultProvider"
+CERTIFICATE_FEATURE_KEY = "TlsProvider"
 CA_APP_NAME = "vault"
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -239,32 +239,12 @@ class VaultTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
     name = "tls.vault"
+    charm_channel = "1/edge"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:
         """Return the config type for the feature."""
         return VaultTlsFeatureConfig
-
-    def default_software_overrides(self) -> SoftwareConfig:
-        """Feature software configuration."""
-        return SoftwareConfig(
-            charms={"manual-tls-certificates": CharmManifest(
-                channel="1/edge")}
-        )
-
-    def manifest_attributes_tfvar_map(self) -> dict:
-        """Manifest attributes terraformvars map."""
-        return {
-            self.tfplan: {
-                "charms": {
-                    "manual-tls-certificates": {
-                        "channel": "manual-tls-certificates-channel",
-                        "revision": "manual-tls-certificates-revision",
-                        "config": "manual-tls-certificates-config",
-                    }
-                }
-            }
-        }
 
     def preseed_questions_content(self) -> list:
         """Generate preseed manifest content."""

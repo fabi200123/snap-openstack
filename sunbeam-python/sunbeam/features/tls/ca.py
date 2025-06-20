@@ -228,31 +228,12 @@ class CaTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
     name = "tls.ca"
+    charm_channel = "latest/stable"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
     def config_type(self) -> type | None:
         """Return the config type for the feature."""
         return CaTlsFeatureConfig
-
-    def default_software_overrides(self) -> SoftwareConfig:
-        """Feature software configuration."""
-        return SoftwareConfig(
-            charms={"manual-tls-certificates": CharmManifest(channel="latest/stable")}
-        )
-
-    def manifest_attributes_tfvar_map(self) -> dict:
-        """Manifest attributes terraformvars map."""
-        return {
-            self.tfplan: {
-                "charms": {
-                    "manual-tls-certificates": {
-                        "channel": "manual-tls-certificates-channel",
-                        "revision": "manual-tls-certificates-revision",
-                        "config": "manual-tls-certificates-config",
-                    }
-                }
-            }
-        }
 
     def preseed_questions_content(self) -> list:
         """Generate preseed manifest content."""

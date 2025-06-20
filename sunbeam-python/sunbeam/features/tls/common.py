@@ -26,7 +26,11 @@ from sunbeam.core.juju import (
     LeaderNotFoundException,
     run_sync,
 )
-from sunbeam.core.manifest import FeatureConfig
+from sunbeam.core.manifest import (
+    CharmManifest,
+    FeatureConfig,
+    SoftwareConfig,
+)
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.features.interface.v1.base import BaseFeatureGroup
 from sunbeam.features.interface.v1.openstack import (
@@ -65,6 +69,7 @@ class TlsFeatureGroup(BaseFeatureGroup):
 class TlsFeature(OpenStackControlPlaneFeature):
     version = Version("0.0.1")
     group = TlsFeatureGroup
+    charm_channel = "latest/stable"
 
     @property
     def ca_cert_name(self) -> str:
@@ -81,6 +86,27 @@ class TlsFeature(OpenStackControlPlaneFeature):
     @click.group()
     def disable_tls(self) -> None:
         """Disable TLS group."""
+
+    def default_software_overrides(self) -> SoftwareConfig:
+        """Feature software configuration."""
+        return SoftwareConfig(
+            charms={"manual-tls-certificates": CharmManifest(
+                channel=self.charm_channel)}
+        )
+
+    def manifest_attributes_tfvar_map(self) -> dict:
+        """Manifest attributes terraformvars map."""
+        return {
+            self.tfplan: {
+                "charms": {
+                    "manual-tls-certificates": {
+                        "channel": "manual-tls-certificates-channel",
+                        "revision": "manual-tls-certificates-revision",
+                        "config": "manual-tls-certificates-config",
+                    }
+                }
+            }
+        }
 
     def provider_config(self, deployment: Deployment) -> dict:
         """Return stored provider configuration."""
