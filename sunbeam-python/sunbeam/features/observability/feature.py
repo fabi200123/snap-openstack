@@ -79,6 +79,7 @@ from sunbeam.features.interface.v1.openstack import (
 from sunbeam.steps.juju import RemoveSaasApplicationsStep
 from sunbeam.steps.k8s import CREDENTIAL_SUFFIX
 from sunbeam.utils import click_option_show_hints, pass_method_obj
+from sunbeam.versions import TRAEFIK_CHANNEL
 
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -91,9 +92,9 @@ GRAFANA_AGENT_TFPLAN = "grafana-agent-plan"
 COS_CONFIG_KEY = "TerraformVarsFeatureObservabilityPlanCos"
 GRAFANA_AGENT_CONFIG_KEY = "TerraformVarsFeatureObservabilityPlanGrafanaAgent"
 
-COS_CHANNEL = "latest/stable"
-GRAFANA_AGENT_CHANNEL = "latest/stable"
-GRAFANA_AGENT_K8S_CHANNEL = "latest/stable"
+COS_CHANNEL = "1/stable"
+GRAFANA_AGENT_CHANNEL = "1/stable"
+GRAFANA_AGENT_K8S_CHANNEL = "1/stable"
 OBSERVABILITY_OFFER_INTERFACES = [
     "grafana_dashboard",
     "prometheus_remote_write",
@@ -601,7 +602,7 @@ class ObservabilityFeature(OpenStackControlPlaneFeature):
         """Feature software configuration."""
         return SoftwareConfig(
             charms={
-                "cos-traefik-k8s": CharmManifest(channel=COS_CHANNEL),
+                "cos-traefik-k8s": CharmManifest(channel=TRAEFIK_CHANNEL),
                 "alertmanager-k8s": CharmManifest(channel=COS_CHANNEL),
                 "grafana-k8s": CharmManifest(channel=COS_CHANNEL),
                 "catalogue-k8s": CharmManifest(channel=COS_CHANNEL),
