@@ -284,7 +284,7 @@ class VaultTlsFeature(TlsFeature):
         multiple=True,
         default=["public"],
         type=click.Choice(["public", "internal", "rgw"], case_sensitive=False),
-        help="Specify endpoints to apply TLS for.",
+        help="Specify which endpoints to apply TLS for.",
     )
     @click.option(
         "--ca-chain",
@@ -300,17 +300,6 @@ class VaultTlsFeature(TlsFeature):
         callback=validate_ca_certificate,
         help="Base64 encoded CA certificate",
     )
-    @click.option(
-        "--external-hostname",
-        "external_hostnames",
-        multiple=True,
-        type=click.Tuple([str, str]),
-        help=(
-            "Endpoint+hostname pair, e.g. "
-            "--external-hostname public example.com "
-            "(repeatable)"
-        ),
-    )
     @click_option_show_hints
     @pass_method_obj
     def enable_cmd(
@@ -319,54 +308,41 @@ class VaultTlsFeature(TlsFeature):
         ca: str,
         ca_chain: str,
         endpoints: list[str],
-        external_hostnames: list[tuple[str, str]],
         show_hints: bool,
     ):
         """Enable TLS Vault feature."""
         # 1) Pre-enable checks
         self.pre_enable(deployment, VaultTlsFeatureConfig, show_hints)
 
-        # 2) Build or load the external_hostname map under CoreConfig
+        # 2) Prompt interactively for each endpoint’s external hostname
         CORE_KEY = "CoreConfig"
-        if external_hostnames:
-            # start fresh if CLI supplied any
-            core_vars: dict = {"external_hostname": {}}
-        else:
-            # load existing (or initialize) if not
-            core_vars = questions.load_answers(deployment.get_client(), CORE_KEY)
-            core_vars.setdefault("external_hostname", {})
+        core_vars = questions.load_answers(deployment.get_client(), CORE_KEY)
+        core_vars.setdefault("external_hostname", {})
 
-        # a) Apply CLI overrides
-        for ep, host in external_hostnames:
-            if ep not in endpoints:
-                raise click.ClickException(
-                    f"Got --external-hostname for '{ep}', but '{ep}' is not in --endpoint"
-                )
+        # Build a QuestionBank only for the endpoints you specified
+        qbank = questions.QuestionBank(
+            questions=external_hostname_questions("traefik", "", endpoints),
+            console=console,
+            previous_answers=core_vars["external_hostname"],
+            show_hint=show_hints,
+        )
+
+        for ep in endpoints:
+            # ask the user
+            host = getattr(qbank, f"external_hostname_{ep}").ask()
+            if not host:
+                raise click.ClickException(f"No hostname provided for endpoint '{ep}'")
             core_vars["external_hostname"][ep] = host
 
-        # b) Prompt only for endpoints still missing
-        missing = [ep for ep in endpoints if ep not in core_vars["external_hostname"]]
-        if missing:
-            qbank = questions.QuestionBank(
-                questions=external_hostname_questions("traefik", "", missing),
-                console=console,
-                previous_answers=core_vars["external_hostname"],
-                show_hint=show_hints,
-            )
-            for ep in missing:
-                val = getattr(qbank, f"external_hostname_{ep}").ask()
-                if not val:
-                    raise click.ClickException(f"No hostname provided for '{ep}'")
-                core_vars["external_hostname"][ep] = val
-
-        # c) Persist merged hostnames back into CoreConfig
+        # Persist into CoreConfig
         questions.write_answers(deployment.get_client(), CORE_KEY, core_vars)
 
-        # 3) Finally enable the Vault TLS feature as usual
+        # 3) Enable the Vault TLS feature as usual
         cfg = VaultTlsFeatureConfig(
             ca=ca,
             ca_chain=ca_chain,
             endpoints=endpoints,
+            external_hostname=core_vars["external_hostname"],
         )
         self.enable_feature(deployment, cfg, show_hints)
 
