@@ -620,10 +620,18 @@ class VaultTlsFeature(TlsFeature):
          show_hints: bool,
      ) -> None:
         """Handler to perform tasks after the feature is enabled."""
-        # 1) keep all the existing CA-to-Keystone logic
-        super().post_enable(deployment, config, show_hints)
+        # grab the hostnames back out of core config
+        # 1) Try to read external_hostnames from the manifest’s core section...
+        manifest = deployment.get_manifest(None)
+        core_feature = manifest.get_feature("core")
+        if core_feature and core_feature.config:
+            # model_dump() returns a dict of the core.config fields
+            core_cfg = core_feature.config.model_dump(by_alias=True)
+        else:
+            # ...otherwise, read whatever was stored via interactive prompts
+            CORE_KEY = "CoreConfig"
+            core_cfg = read_config(deployment.get_client(), CORE_KEY)
 
-        # 2) now inject external_hostname into each traefik app
         jhelper = JujuHelper(deployment.get_connected_controller())
         model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
 
@@ -634,7 +642,7 @@ class VaultTlsFeature(TlsFeature):
             "rgw": "traefik-rgw",
         }
 
-        for endpoint, hostname in config.external_hostname.items():
+        for endpoint, hostname in core_cfg.get("external_hostname", {}).items():
             app_name = app_map.get(endpoint)
             if not app_name:
                 LOG.warning(f"No Juju app mapping for endpoint '{endpoint}'")
