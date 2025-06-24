@@ -618,7 +618,6 @@ class VaultTlsFeature(TlsFeature):
                 "Enable Vault first."
             )
 
-
     def post_enable(
         self,
         deployment: Deployment,
@@ -629,7 +628,7 @@ class VaultTlsFeature(TlsFeature):
         # 1) Run the existing TLS/CA post-enable logic.
         super().post_enable(deployment, config, show_hints)
 
-        # 2) Load any interactive answers from CoreConfig
+        # 2) Gather hostnames from CoreConfig (interactive) and manifest (preseed).
         CORE_KEY = "CoreConfig"
         try:
             core_answers = read_config(deployment.get_client(), CORE_KEY)
@@ -637,7 +636,6 @@ class VaultTlsFeature(TlsFeature):
         except ConfigItemNotFoundException:
             core_hostnames = {}
 
-        # 3) Load any preseeded values from the manifest under 'core.config.external_hostname'
         manifest = deployment.get_manifest(None)
         core_feature = manifest.get_feature("core")
         if core_feature and core_feature.config:
@@ -646,25 +644,51 @@ class VaultTlsFeature(TlsFeature):
         else:
             manifest_hostnames = {}
 
-        # 4) Merge them, giving precedence to CoreConfig (interactive/CLI) over manifest
         external_map: dict[str, str] = {**manifest_hostnames, **core_hostnames}
 
         if not external_map:
-            console.print("ℹ️  No external hostnames to configure; skipping Juju apps.")
+            console.print("No external hostnames to configure; skipping Juju apps.")
             return
 
-        # 5) Map endpoints → Juju application names
+        # 3) Connect to Juju once
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+
+        # 4) Verify a single common domain across all hostnames
+        domains = set()
+        for hostname in external_map.values():
+            parts = hostname.split(".", 1)
+            if len(parts) != 2 or not parts[1]:
+                raise click.ClickException(
+                    f"Invalid external hostname '{hostname}', must be '<label>.<domain>'"
+                )
+            domains.add(parts[1])
+
+        if len(domains) != 1:
+            raise click.ClickException(
+                "All external hostnames must share the same domain, "
+                f"but found: {', '.join(external_map.values())}"
+            )
+
+        common_domain = domains.pop()
+
+        # 5) Set the Vault application's common_name
+        vault_app = run_sync(jhelper.get_application(CA_APP_NAME, model))
+        try:
+            run_sync(vault_app.set_config({"common_name": common_domain}))
+            console.print(f"✔️  Set {CA_APP_NAME}.common_name = {common_domain}")
+        except Exception as e:
+            LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
+            raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
+
+        # 6) Map endpoints → Juju application names for Traefik
         app_map = {
             "public": "traefik-public",
             "internal": "traefik",
             "rgw": "traefik-rgw",
         }
 
-        # 6) Connect to Juju model once
-        jhelper = JujuHelper(deployment.get_connected_controller())
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
-
-        # 7) Set each app’s external-hostname config
+        # 7) Configure each Traefik app’s external_hostname
         for endpoint, hostname in external_map.items():
             app_name = app_map.get(endpoint)
             if not app_name:
