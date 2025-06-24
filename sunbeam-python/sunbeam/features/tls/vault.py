@@ -644,42 +644,57 @@ class VaultTlsFeature(TlsFeature):
 
 
     def post_enable(
-         self,
-         deployment: Deployment,
+        self,
+        deployment: Deployment,
         config: VaultTlsFeatureConfig,
-         show_hints: bool,
-     ) -> None:
+        show_hints: bool,
+    ) -> None:
         """Handler to perform tasks after the feature is enabled."""
-        # 1) Try to read external_hostnames from the manifest’s core section...
+        # 1) Run the existing TLS/CA post-enable logic.
+        super().post_enable(deployment, config, show_hints)
+
+        # 2) Load any interactive answers from CoreConfig
+        CORE_KEY = "CoreConfig"
+        try:
+            core_answers = read_config(deployment.get_client(), CORE_KEY)
+            core_hostnames = core_answers.get("external_hostname", {}) or {}
+        except ConfigItemNotFoundException:
+            core_hostnames = {}
+
+        # 3) Load any preseeded values from the manifest under 'core.config.external_hostname'
         manifest = deployment.get_manifest(None)
         core_feature = manifest.get_feature("core")
         if core_feature and core_feature.config:
-            core_cfg: dict = core_feature.config.model_dump(by_alias=True)
+            manifest_vals = core_feature.config.model_dump(by_alias=True)
+            manifest_hostnames = manifest_vals.get("external_hostname", {}) or {}
         else:
-            # ...otherwise, read whatever was stored via interactive prompts
-            CORE_KEY = "CoreConfig"
-            try:
-                core_cfg = read_config(deployment.get_client(), CORE_KEY)
-            except ConfigItemNotFoundException:
-                core_cfg = {}
+            manifest_hostnames = {}
 
-        jhelper = JujuHelper(deployment.get_connected_controller())
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        # 4) Merge them, giving precedence to CoreConfig (interactive/CLI) over manifest
+        external_map: dict[str, str] = {**manifest_hostnames, **core_hostnames}
 
-        # map our endpoints to the Juju application names
+        if not external_map:
+            console.print("ℹ️  No external hostnames to configure; skipping Juju apps.")
+            return
+
+        # 5) Map endpoints → Juju application names
         app_map = {
             "public": "traefik-public",
             "internal": "traefik",
             "rgw": "traefik-rgw",
         }
 
-        for endpoint, hostname in core_cfg.get("external_hostname", {}).items():
+        # 6) Connect to Juju model once
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+
+        # 7) Set each app’s external-hostname config
+        for endpoint, hostname in external_map.items():
             app_name = app_map.get(endpoint)
             if not app_name:
-                LOG.warning(f"No Juju app mapping for endpoint '{endpoint}'")
+                LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            # fetch the application and set its config
             app = run_sync(jhelper.get_application(app_name, model))
             try:
                 run_sync(app.set_config({"external_hostname": hostname}))
