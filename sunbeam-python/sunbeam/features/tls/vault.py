@@ -593,7 +593,7 @@ class VaultTlsFeature(TlsFeature):
 
     def pre_enable(
         self, deployment: Deployment,
-        config: TlsFeatureConfig, show_hints: bool
+        config: VaultTlsFeatureConfig, show_hints: bool
     ) -> None:
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
@@ -611,3 +611,42 @@ class VaultTlsFeature(TlsFeature):
                 "Cannot enable TLS Vault as Vault is not enabled."
                 "Enable Vault first."
             )
+
+
+    def post_enable(
+         self,
+         deployment: Deployment,
+        config: VaultTlsFeatureConfig,
+         show_hints: bool,
+     ) -> None:
+        """Handler to perform tasks after the feature is enabled."""
+        # 1) keep all the existing CA-to-Keystone logic
+        super().post_enable(deployment, config, show_hints)
+
+        # 2) now inject external_hostname into each traefik app
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+
+        # map our endpoints to the Juju application names
+        app_map = {
+            "public": "traefik-public",
+            "internal": "traefik",
+            "rgw": "traefik-rgw",
+        }
+
+        for endpoint, hostname in config.external_hostname.items():
+            app_name = app_map.get(endpoint)
+            if not app_name:
+                LOG.warning(f"No Juju app mapping for endpoint '{endpoint}'")
+                continue
+
+            # fetch the application and set its config
+            app = run_sync(jhelper.get_application(app_name, model))
+            try:
+                run_sync(app.set_config({"external_hostname": hostname}))
+                console.print(f"✔️  Set {app_name}.external_hostname = {hostname}")
+            except Exception as e:
+                LOG.error(f"Failed to set external_hostname on {app_name}: {e}")
+                raise click.ClickException(
+                    f"Could not configure {app_name}: {e}"
+                )
