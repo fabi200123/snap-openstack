@@ -60,6 +60,7 @@ from sunbeam.features.tls.common import (
     TlsFeature,
     TlsFeatureConfig,
     certificate_questions,
+    external_hostname_questions,
     get_outstanding_certificate_requests,
 )
 from sunbeam.features.vault.feature import (
@@ -81,6 +82,7 @@ class _Certificate(pydantic.BaseModel):
 
 class VaultTlsFeatureConfig(TlsFeatureConfig):
     certificates: dict[str, _Certificate] = {}
+    external_hostname: dict[str, str] = {}
 
 
 class ConfigureVaultCAStep(BaseStep):
@@ -262,7 +264,18 @@ class VaultTlsFeature(TlsFeature):
             section_description="TLS Certificates",
             comment_out=True,
         )
-        return content
+        external_question_bank = questions.QuestionBank(
+            questions=external_hostname_questions("traefik", "", ["public", "internal", "rgw"]),
+            console=console,
+            previous_answers={},
+        )
+        external_content = questions.show_questions(
+            external_question_bank,
+            section="external_hostname",
+            section_description="External hostnames for endpoints",
+            comment_out=True,
+        )
+        return [content, external_content]
 
     @click.command()
     @click.option(
@@ -300,13 +313,33 @@ class VaultTlsFeature(TlsFeature):
         """Enable TLS Vault feature."""
         # Check if vault is enabled
 
+        # 1) Pre-enable checks
         self.pre_enable(deployment, VaultTlsFeatureConfig, show_hints)
-        self.enable_feature(
-            deployment,
-            VaultTlsFeatureConfig(
-                ca=ca, ca_chain=ca_chain, endpoints=endpoints),
-            show_hints,
+
+        # 2) Prompt for external hostnames for each requested endpoint
+        ext_qs = external_hostname_questions("traefik", "", endpoints)
+        ext_bank = questions.QuestionBank(
+            questions=ext_qs,
+            console=console,
+            previous_answers={},
+            show_hint=show_hints,
         )
+        ext_map: dict[str, str] = {}
+        for ep in endpoints:
+            host = getattr(ext_bank, f"external_hostname_{ep}").ask()
+            if not host:
+                raise click.ClickException(f"No hostname provided for endpoint '{ep}'")
+            ext_map[ep] = host
+
+        # 3) Enable feature with both TLS config and external hostnames
+        cfg = VaultTlsFeatureConfig(
+            ca=ca,
+            ca_chain=ca_chain,
+            endpoints=endpoints,
+            external_hostname=ext_map,
+        )
+        self.enable_feature(deployment, cfg, show_hints)
+
 
     @click.command()
     @click_option_show_hints

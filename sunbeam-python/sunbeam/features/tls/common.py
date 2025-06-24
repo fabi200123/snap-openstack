@@ -372,6 +372,17 @@ def certificate_questions(unit: str, subject: str):
     }
 
 
+def external_hostname_questions(unit: str, subject: str, endpoints: list[str]):
+    """Questions to ask for external hostname."""
+    external_hostname_questions = {}
+    for endpoint in endpoints:
+        external_hostname_questions[f"external_hostname_{endpoint}"] = questions.PromptQuestion(
+            f"External hostname for endpoint {endpoint}",
+        )
+
+    return external_hostname_questions
+
+
 def get_outstanding_certificate_requests(
     app: str, model: str, jhelper: JujuHelper
 ) -> dict:
