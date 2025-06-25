@@ -151,8 +151,10 @@ class ConfigureVaultCAStep(BaseStep):
             csr = record.get("csr")
             app = record.get("application_name")
             relation_id = record.get("relation_id")
+            # Until Manual-TLS-Certificates charm add to relation data
+            # the unit name, will use the hardcoded Vault name
             if not unit_name:
-                unit_name = str(relation_id)
+                unit_name = "vault"
 
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
@@ -415,7 +417,7 @@ class VaultTlsFeature(TlsFeature):
             app = run_sync(jhelper.get_application(app_name, model))
             try:
                 run_sync(app.set_config({"external_hostname": hostname}))
-                console.print(f"✔️  Set {app_name}.external_hostname = {hostname}")
+                console.print(f"Set {app_name}.external_hostname = {hostname}")
             except Exception as e:
                 LOG.error(f"Failed to set external_hostname on {app_name}: {e}")
                 raise click.ClickException(
@@ -430,7 +432,6 @@ class VaultTlsFeature(TlsFeature):
             external_hostname=external_map,
         )
         self.enable_feature(deployment, cfg, show_hints)
-
 
     @click.command()
     @click_option_show_hints
@@ -513,19 +514,21 @@ class VaultTlsFeature(TlsFeature):
             )
 
         certs_to_process = json.loads(action_result.get("result", "[]"))
+        # Hardcoded Vault unit name until Manual-TLS-Certificates charm
+        # adds the unit name to the relation data
         csrs = {
-            relation: csr
+            unit_name: csr
             for record in certs_to_process
-            if (relation := str(record.get("relation_id"))) and (
+            if (unit_name := "vault") and (
                 csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
             table = Table()
-            table.add_column("Relation ID")
+            table.add_column("Application")
             table.add_column("CSR")
-            for relation, csr in csrs.items():
-                table.add_row(relation, csr)
+            for unit_name, csr in csrs.items():
+                table.add_row(unit_name, csr)
             console.print(table)
         elif format == FORMAT_YAML:
             yaml.add_representer(str, str_presenter)
