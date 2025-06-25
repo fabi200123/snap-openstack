@@ -160,6 +160,28 @@ class ConfigureVaultCAStep(BaseStep):
                 raise click.ClickException(
                     f"Not a valid CSR for unit {unit_name}")
 
+            # 1) If the manifest pre-seed has a cert for this subject, use it!
+            pre_cert = (
+                self.preseed.get("certificates", {})
+                .get(subject, {})
+                .get("certificate")
+            )
+            if pre_cert:
+                if not is_certificate_valid(pre_cert):
+                    raise click.ClickException(
+                        f"Pre-seeded certificate for {subject!r} is invalid"
+                    )
+                # record it and write back into variables
+                self.process_certs[subject] = {
+                    "app": record["application_name"],
+                    "unit": unit_name,
+                    "relation_id": record["relation_id"],
+                    "csr": record["csr"],
+                    "certificate": pre_cert,
+                }
+                variables["certificates"].setdefault(subject, {})["certificate"] = pre_cert
+                continue
+
             cert_questions = certificate_questions(unit_name, subject)
             certificates_bank = questions.QuestionBank(
                 questions=cert_questions,
