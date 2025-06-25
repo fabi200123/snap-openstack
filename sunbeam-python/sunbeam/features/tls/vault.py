@@ -531,8 +531,7 @@ class VaultTlsFeature(TlsFeature):
         manifest = deployment.get_manifest(manifest_path)
 
         preseed: dict = {}
-        raw = getattr(manifest, "raw", {})
-        features_block = raw.get("features", {})
+        features_block = getattr(manifest, "features", {})
         tls_block = features_block.get("tls", {})
         vault_block = tls_block.get("vault", {})
         if isinstance(vault_block, dict) and vault_block.get("config"):
