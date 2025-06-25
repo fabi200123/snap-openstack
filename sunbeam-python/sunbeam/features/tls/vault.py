@@ -552,13 +552,17 @@ class VaultTlsFeature(TlsFeature):
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
 
-        preseed: dict = {}
-        console.print(f"TLS Feature: {manifest.get_feature('tls')}")
-        if (tls_feat := manifest.get_feature("tls")):
-            if (vault_feat := tls_feat.get_feature("vault")) and vault_feat.config:
-                if vault_cfg := tls_feat.config.get("vault"):
-                    console.print(f"Using nested TLS-Vault config: {vault_cfg}")
-                    preseed = vault_cfg
+        raw: dict = manifest.model_dump(by_alias=True)
+        vault_cfg = (
+            raw
+            .get("features", {})
+            .get("tls",    {})
+            .get("vault",  {})
+            .get("config", {})
+        )
+        if vault_cfg:
+            console.print(f"Found TLS-Vault preseed block: {vault_cfg}")
+        preseed: dict = vault_cfg or {}
 
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
