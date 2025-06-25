@@ -532,6 +532,7 @@ class VaultTlsFeature(TlsFeature):
 
         preseed: dict = {}
         features_block = getattr(manifest, "features", {})
+        console.print("Features block:", features_block)
         tls_block = features_block.get("tls", {})
         vault_block = tls_block.get("vault", {})
         if isinstance(vault_block, dict) and vault_block.get("config"):
