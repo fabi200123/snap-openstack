@@ -503,9 +503,7 @@ class VaultTlsFeature(TlsFeature):
 
     @click.command()
     @click.option(
-        "-m",
-        "--manifest",
-        "manifest_path",
+        "-m", "--manifest", "manifest_path",
         help="Manifest file.",
         type=click.Path(exists=True, dir_okay=False, path_type=Path),
     )
@@ -520,11 +518,12 @@ class VaultTlsFeature(TlsFeature):
         """Configure Unit certs."""
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
+
+        # <-- updated preseed logic here -->
         preseed: dict = {}
-        # self.name is "tls.vault", so manifest.get_feature(self.name) finds it
-        feature = manifest.get_feature(self.name)
-        if feature and feature.config:
-            preseed = feature.config.model_dump(by_alias=True)
+        if (feat := manifest.get_feature(self.name)) and feat.config:
+            preseed = feat.config.model_dump(by_alias=True)
+
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
 
@@ -548,11 +547,10 @@ class VaultTlsFeature(TlsFeature):
                 ca_chain,
                 deployment_preseed=preseed,
             ),
-            # On ingress change, the keystone takes time to update the service
-            # endpoint, update the identity-service relation data on every
-            # related application.
             WaitForApplicationsStep(
-                jhelper, apps_to_monitor, model,
+                jhelper,
+                apps_to_monitor,
+                model,
                 INGRESS_CHANGE_APPLICATION_TIMEOUT
             ),
         ]
