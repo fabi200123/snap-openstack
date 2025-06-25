@@ -339,7 +339,17 @@ class VaultTlsFeature(TlsFeature):
 
         # 3) Validate that all hostnames share a single domain,
         #    and set vault.common_name accordingly BEFORE we enable.
-        external_map = core_vars["external_hostname"]
+        external_map = {
+            ep: core_vars["external_hostname"][ep]
+            for ep in endpoints
+            if ep in core_vars["external_hostname"]
+        }
+
+        if not external_map:
+            raise click.ClickException(
+                "No external hostnames found for endpoints: " +
+                ", ".join(endpoints)
+            )
         # extract everything after the first dot
         domains = {h.split(".", 1)[1] for h in external_map.values()}
         if len(domains) != 1:
