@@ -396,7 +396,7 @@ class VaultTlsFeature(TlsFeature):
         vault_app = run_sync(jhelper.get_application(CA_APP_NAME, model))
         try:
             run_sync(vault_app.set_config({"common_name": common_domain}))
-            console.print(f"✔️  Set {CA_APP_NAME}.common_name = {common_domain}")
+            console.print(f"Set {CA_APP_NAME} common_name = {common_domain}")
         except Exception as e:
             LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
             raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
