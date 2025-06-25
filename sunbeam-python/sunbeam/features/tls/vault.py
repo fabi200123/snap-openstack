@@ -554,7 +554,7 @@ class VaultTlsFeature(TlsFeature):
 
         # <-- updated preseed logic here -->
         preseed: dict = {}
-        if (feat := manifest.get_feature(self.name)) and feat.config:
+        if (feat := manifest.get_feature(self.name.split(".")[-1])) and feat.config:
             preseed = feat.config.model_dump(by_alias=True)
 
         model = OPENSTACK_MODEL
