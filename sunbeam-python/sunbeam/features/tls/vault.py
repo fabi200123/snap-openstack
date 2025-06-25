@@ -152,7 +152,9 @@ class ConfigureVaultCAStep(BaseStep):
             app = record.get("application_name")
             relation_id = record.get("relation_id")
             if not unit_name:
-                unit_name = str(relation_id)
+                # Until manual-tls-certificates charm supports unit_name
+                # in its relation data, will use a hardcoded "Vault" value.
+                unit_name = "Vault"
 
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
@@ -528,10 +530,18 @@ class VaultTlsFeature(TlsFeature):
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
 
-        # <-- updated preseed logic here -->
         preseed: dict = {}
-        if (feat := manifest.get_feature(self.name)) and feat.config:
-            preseed = feat.config.model_dump(by_alias=True)
+        raw = getattr(manifest, "raw", {})
+        features_block = raw.get("features", {})
+        tls_block = features_block.get("tls", {})
+        vault_block = tls_block.get("vault", {})
+        if isinstance(vault_block, dict) and vault_block.get("config"):
+            preseed = vault_block["config"]
+        else:
+            # fallback to old top-level vault feature
+            feature_key = self.name.split(".")[-1]
+            if (feat := manifest.get_feature(feature_key)) and feat.config:
+                preseed = feat.config.model_dump(by_alias=True)
 
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
