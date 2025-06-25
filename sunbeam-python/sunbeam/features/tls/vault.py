@@ -531,13 +531,17 @@ class VaultTlsFeature(TlsFeature):
         """Configure Unit certs."""
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
+        # seed any pre-provided certs from the manifest
         preseed = {}
-        if (vault_feat := manifest.get_feature(self.name.split(".")[-1])) and vault_feat.config:
-            # vault_feat.config is VaultTlsFeatureConfig
-            # its .certificates is a dict[str, _Certificate]
-            for subject, cert_obj in (vault_feat.config.certificates or {}).items():
-                # each cert_obj has attribute .certificate (the base64‐PEM string)
-                preseed[subject] = {"certificate": cert_obj.certificate}
+        vault_raw = (
+            manifest.data.get("features", {})
+                         .get("tls", {})
+                         .get("vault", {})
+                         .get("config", {})
+        )
+        for subject, entry in vault_raw.get("certificates", {}).items():
+            if cert_b64 := entry.get("certificate"):
+                preseed[subject] = {"certificate": cert_b64}
 
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
