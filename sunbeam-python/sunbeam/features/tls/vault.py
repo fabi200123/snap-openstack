@@ -618,16 +618,6 @@ class VaultTlsFeature(TlsFeature):
                 "Enable Vault first."
             )
 
-    def post_enable(
-        self,
-        deployment: Deployment,
-        config: VaultTlsFeatureConfig,
-        show_hints: bool,
-    ) -> None:
-        """Handler to perform tasks after the feature is enabled."""
-        # 1) Run the existing TLS/CA post-enable logic.
-        super().post_enable(deployment, config, show_hints)
-
         # 2) Gather hostnames from CoreConfig (interactive) and manifest (preseed).
         CORE_KEY = "CoreConfig"
         try:
@@ -704,3 +694,4 @@ class VaultTlsFeature(TlsFeature):
                 raise click.ClickException(
                     f"Could not configure {app_name}: {e}"
                 )
+
