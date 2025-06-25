@@ -531,17 +531,8 @@ class VaultTlsFeature(TlsFeature):
         manifest = deployment.get_manifest(manifest_path)
 
         preseed: dict = {}
-        features_block = getattr(manifest, "features", {})
-        console.print("Features block:", features_block)
-        tls_block = features_block.get("tls", {})
-        vault_block = tls_block.get("vault", {})
-        if isinstance(vault_block, dict) and vault_block.get("config"):
-            preseed = vault_block["config"]
-        else:
-            # fallback to old top-level vault feature
-            feature_key = self.name.split(".")[-1]
-            if (feat := manifest.get_feature(feature_key)) and feat.config:
-                preseed = feat.config.model_dump(by_alias=True)
+        if (ca := manifest.get_feature(self.name.split(".")[-1])) and ca.config:
+            preseed = ca.config.model_dump(by_alias=True)
 
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
