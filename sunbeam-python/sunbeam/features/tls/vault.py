@@ -553,16 +553,17 @@ class VaultTlsFeature(TlsFeature):
         manifest = deployment.get_manifest(manifest_path)
 
         raw: dict = manifest.model_dump(by_alias=True)
-        vault_cfg = (
+        certs = (
             raw
             .get("features", {})
             .get("tls",    {})
             .get("vault",  {})
             .get("config", {})
+            .get("certificates", {})
         )
-        if vault_cfg:
-            console.print(f"Found TLS-Vault preseed block: {vault_cfg}")
-        preseed: dict = vault_cfg or {}
+        if certs:
+            console.print(f"Found preseeded certificates: {list(certs.keys())}")
+        preseed: dict = {"certificates": certs} if certs else {}
 
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
