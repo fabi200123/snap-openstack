@@ -494,19 +494,21 @@ class VaultTlsFeature(TlsFeature):
             )
 
         certs_to_process = json.loads(action_result.get("result", "[]"))
+        # Until Manual-TLS-Certificates charm supports unit_name in its relation data,
+        # we will use a hardcoded "Vault" value for unit_name.
         csrs = {
-            relation: csr
+            unit_name: csr
             for record in certs_to_process
-            if (relation := str(record.get("relation_id"))) and (
+            if (unit_name := "Vault") and (
                 csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
             table = Table()
-            table.add_column("Relation ID")
+            table.add_column("Application")
             table.add_column("CSR")
-            for relation, csr in csrs.items():
-                table.add_row(relation, csr)
+            for unit_name, csr in csrs.items():
+                table.add_row(unit_name, csr)
             console.print(table)
         elif format == FORMAT_YAML:
             yaml.add_representer(str, str_presenter)
