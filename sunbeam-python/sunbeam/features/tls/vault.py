@@ -532,7 +532,7 @@ class VaultTlsFeature(TlsFeature):
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
         preseed = {}
-        if (vault_feat := manifest.get_feature(self.name)) and vault_feat.config:
+        if (vault_feat := manifest.get_feature(self.name.split(".")[-1])) and vault_feat.config:
             # vault_feat.config is VaultTlsFeatureConfig
             # its .certificates is a dict[str, _Certificate]
             for subject, cert_obj in (vault_feat.config.certificates or {}).items():
