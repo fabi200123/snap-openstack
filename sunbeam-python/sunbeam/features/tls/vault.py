@@ -161,38 +161,6 @@ class ConfigureVaultCAStep(BaseStep):
             if not subject:
                 raise click.ClickException(
                     f"Not a valid CSR for unit {unit_name}")
-
-            # 1) If the manifest pre-seed has a Base64-encoded PEM for this subject, decode & use it:
-            import base64
-            pre_raw = self.preseed.get("certificates", {}).get(subject, {}).get("certificate")
-            if pre_raw:
-                try:
-                    # decode the entire PEM (including headers)
-                    pre_cert = base64.b64decode(pre_raw).decode("utf-8")
-                except Exception as e:
-                    raise click.ClickException(
-                        f"Failed to Base64-decode pre-seeded certificate for {subject!r}: {e}"
-                    )
-
-                # validate the decoded PEM
-                if not is_certificate_valid(pre_cert):
-                    raise click.ClickException(
-                        f"Pre-seeded certificate for {subject!r} is invalid after decoding"
-                    )
-
-                # accept it without prompting
-                self.process_certs[subject] = {
-                    "app": record["application_name"],
-                    "unit": unit_name,
-                    "relation_id": record["relation_id"],
-                    "csr": record["csr"],
-                    "certificate": pre_cert,
-                }
-                variables.setdefault("certificates", {}).setdefault(subject, {})[
-                    "certificate"
-                ] = pre_cert
-                continue
-
             cert_questions = certificate_questions(unit_name, subject)
             certificates_bank = questions.QuestionBank(
                 questions=cert_questions,
@@ -562,8 +530,7 @@ class VaultTlsFeature(TlsFeature):
             .get("certificates", {})
         )
         if certs:
-            console.print(f"Found preseeded certificates: {list(certs.keys())}")
-        preseed: dict = {"certificates": certs} if certs else {}
+            preseed: dict = {"certificates": certs} if certs else {}
 
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
