@@ -337,12 +337,35 @@ class VaultTlsFeature(TlsFeature):
         # Persist into CoreConfig
         questions.write_answers(deployment.get_client(), CORE_KEY, core_vars)
 
-        # 3) Enable the Vault TLS feature as usual
+        # 3) Validate that all hostnames share a single domain,
+        #    and set vault.common_name accordingly BEFORE we enable.
+        external_map = core_vars["external_hostname"]
+        # extract everything after the first dot
+        domains = {h.split(".", 1)[1] for h in external_map.values()}
+        if len(domains) != 1:
+            raise click.ClickException(
+                "All external hostnames must share the same domain, "
+                f"but found: {', '.join(external_map.values())}"
+            )
+        common_domain = domains.pop()
+
+        # connect to Juju and set vault.common_name
+        jhelper = JujuHelper(deployment.get_connected_controller())
+        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        vault_app = run_sync(jhelper.get_application(CA_APP_NAME, model))
+        try:
+            run_sync(vault_app.set_config({"common_name": common_domain}))
+            console.print(f"✔️  Set {CA_APP_NAME}.common_name = {common_domain}")
+        except Exception as e:
+            LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
+            raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
+
+        # 4) Finally, enable the Vault TLS feature as usual
         cfg = VaultTlsFeatureConfig(
             ca=ca,
             ca_chain=ca_chain,
             endpoints=endpoints,
-            external_hostname=core_vars["external_hostname"],
+            external_hostname=external_map,
         )
         self.enable_feature(deployment, cfg, show_hints)
 
