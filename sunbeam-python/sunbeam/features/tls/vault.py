@@ -520,10 +520,11 @@ class VaultTlsFeature(TlsFeature):
         """Configure Unit certs."""
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
-        preseed = {}
-        if (ca := manifest.get_feature(
-             self.name.split(".")[-1])) and ca.config:
-            preseed = ca.config.model_dump(by_alias=True)
+        preseed: dict = {}
+        # self.name is "tls.vault", so manifest.get_feature(self.name) finds it
+        feature = manifest.get_feature(self.name)
+        if feature and feature.config:
+            preseed = feature.config.model_dump(by_alias=True)
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
 
