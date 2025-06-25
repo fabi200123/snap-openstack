@@ -401,6 +401,27 @@ class VaultTlsFeature(TlsFeature):
             LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
             raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
 
+        app_map = {
+            "public": "traefik-public",
+            "internal": "traefik",
+            "rgw": "traefik-rgw",
+        }
+        for endpoint, hostname in external_map.items():
+            app_name = app_map.get(endpoint)
+            if not app_name:
+                LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
+                continue
+
+            app = run_sync(jhelper.get_application(app_name, model))
+            try:
+                run_sync(app.set_config({"external_hostname": hostname}))
+                console.print(f"✔️  Set {app_name}.external_hostname = {hostname}")
+            except Exception as e:
+                LOG.error(f"Failed to set external_hostname on {app_name}: {e}")
+                raise click.ClickException(
+                    f"Could not configure {app_name}: {e}"
+                )
+
         # 4) Finally, enable the Vault TLS feature as usual
         cfg = VaultTlsFeatureConfig(
             ca=ca,
