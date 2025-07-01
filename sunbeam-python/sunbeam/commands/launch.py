@@ -118,6 +118,8 @@ def launch(
         try:
             instance_name = name if name else petname.Generate()
             image = conn.compute.find_image(image_name)
+            if not image:
+                raise click.ClickException(f"Image '{image_name}' not found.")
             flavor = conn.compute.find_flavor("m1.tiny")
             network = conn.network.find_network(f"{tf_output['OS_USERNAME']}-network")
             keypair = conn.compute.find_keypair(key)
