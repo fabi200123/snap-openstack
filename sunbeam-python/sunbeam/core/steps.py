@@ -730,7 +730,7 @@ class PatchLoadBalancerServicesIPPoolStep(BaseStep, abc.ABC):
 
     @tenacity.retry(
         wait=tenacity.wait_fixed(10),
-        stop=tenacity.stop_after_delay(120),
+        stop=tenacity.stop_after_delay(300),
         retry=tenacity.retry_if_exception_type(ValueError),
         reraise=True,
     )
