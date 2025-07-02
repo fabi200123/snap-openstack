@@ -160,6 +160,10 @@ from sunbeam.steps.openstack import (
     PromptDatabaseTopologyStep,
     PromptRegionStep,
 )
+from sunbeam.steps.sso import (
+    DeployIdentityProvidersStep,
+    ValidateIdentityManifest,
+)
 from sunbeam.steps.sunbeam_machine import (
     AddSunbeamMachineUnitsStep,
     DeploySunbeamMachineApplicationStep,
@@ -692,6 +696,7 @@ def bootstrap(
     )
     plan.append(PromptDatabaseTopologyStep(client, manifest, accept_defaults))
     plan.append(PromptRegionStep(client, manifest, accept_defaults))
+    plan.append(ValidateIdentityManifest(client, manifest))
     run_plan(plan, console, show_hints)
 
     update_config(client, DEPLOYMENTS_CONFIG_KEY, deployments.get_minimal_info())
@@ -809,6 +814,14 @@ def bootstrap(
                 topology,
                 deployment.openstack_machines_model,
                 proxy_settings=proxy_settings,
+            )
+        )
+        plan1.append(
+            DeployIdentityProvidersStep(
+                deployment,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
             )
         )
         # Redeploy of Microceph is required to fill terraform vars

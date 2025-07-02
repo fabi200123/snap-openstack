@@ -175,6 +175,10 @@ from sunbeam.steps.openstack import (
     PromptDatabaseTopologyStep,
     PromptRegionStep,
 )
+from sunbeam.steps.sso import (
+    DeployIdentityProvidersStep,
+    ValidateIdentityManifest,
+)
 from sunbeam.steps.sunbeam_machine import (
     AddSunbeamMachineUnitsStep,
     DeploySunbeamMachineApplicationStep,
@@ -624,6 +628,7 @@ def deploy(
 
     plan2.append(PromptDatabaseTopologyStep(client, manifest, accept_defaults))
     plan2.append(PromptRegionStep(client, manifest, accept_defaults))
+    plan2.append(ValidateIdentityManifest(client, manifest))
     plan2.append(TerraformInitStep(tfhelper_sunbeam_machine))
     plan2.append(
         DeploySunbeamMachineApplicationStep(
@@ -748,6 +753,14 @@ def deploy(
             topology,
             deployment.openstack_machines_model,
             proxy_settings=proxy_settings,
+        )
+    )
+    plan2.append(
+        DeployIdentityProvidersStep(
+            deployment,
+            tfhelper_openstack_deploy,
+            jhelper,
+            manifest,
         )
     )
     plan2.append(

@@ -214,11 +214,20 @@ class CoreConfig(pydantic.BaseModel):
                 return v.split(",")
             return v
 
+    class _Identity(pydantic.BaseModel):
+        class _IdentityProfile(pydantic.BaseModel):
+            provider: str
+            protocol: str
+            config: dict[str, str]
+
+        profiles: dict[str, _IdentityProfile]
+
     proxy: _ProxyConfig | None = None
     bootstrap: _BootstrapConfig | None = None
     database: str | None = None
     region: str | None = None
     addons: _Addons | None = None
+    identity: _Identity | None = None
     k8s_addons: _K8sAddons | None = pydantic.Field(default=None, alias="k8s-addons")
     traefik_endpoints: dict[str, str] | None = pydantic.Field(
         default=None, alias="traefik-endpoints"

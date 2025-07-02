@@ -158,6 +158,12 @@ DEPLOY_OPENSTACK_TFVAR_MAP: VarMap = {
     ],
 }
 
+# kratos-external-idp-integrator is used to enable external IDP integration.
+DEPLOY_OPENSTACK_TFVAR_MAP["charms"]["kratos-external-idp-integrator"] = {
+    "channel": "kratos-idp-channel",
+    "revision": "kratos-idp-revision",
+}
+
 # mysql-k8s supports a config map when deployed in many-mysql mode
 DEPLOY_OPENSTACK_TFVAR_MAP["charms"]["mysql-k8s"]["config-map"] = "mysql-config-map"
 # mysql-k8s supports a storage map when deployed in many-mysql mode
