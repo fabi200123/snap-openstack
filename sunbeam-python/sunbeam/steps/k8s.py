@@ -132,6 +132,14 @@ def validate_cidrs(ip_ranges: str, separator: str = ","):
     for ip_cidr in ip_ranges.split(separator):
         ipaddress.ip_network(ip_cidr)
 
+def validate_ip_list(ip_list: str, separator: str = ","):
+    """Ensure each comma-separated token is a valid IP."""
+    for ip in ip_list.split(separator):
+        ip = ip.strip()
+        if not ip:
+            continue
+        ipaddress.ip_address(ip)
+
 
 def k8s_addons_questions():
     return {
@@ -140,6 +148,29 @@ def k8s_addons_questions():
             default_value="172.16.1.201-172.16.1.240",
             validation_function=validate_cidr_or_ip_ranges,
             description=LOADBALANCER_QUESTION_DESCRIPTION,
+        ),
+        # new: do we reserve external IPs for specific services?
+        "reserve_ext_ips": PromptQuestion(
+            "Reserve External IPs for applications? [y/n]",
+            default_value="n",
+            validation_function=lambda v: v.lower() in ("y", "n"),
+            description="If yes, you’ll be asked per‐service IPs.",
+        ),
+        # only asked if reserve_ext_ips == "y"
+        "ext_ip_traefik_public": PromptQuestion(
+            "External IP for public API endpoints (traefik-public-k8s)",
+            default_value="",
+            validation_function=validate_ip_list,
+        ),
+        "ext_ip_traefik_internal": PromptQuestion(
+            "External IP for internal API endpoints (traefik-k8s)",
+            default_value="",
+            validation_function=validate_ip_list,
+        ),
+        "ext_ip_traefik_rgw": PromptQuestion(
+            "External IP for RGW service (traefik-rgw-k8s)",
+            default_value="",
+            validation_function=validate_ip_list,
         ),
     }
 
