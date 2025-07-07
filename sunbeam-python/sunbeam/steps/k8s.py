@@ -202,6 +202,17 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
     """Deploy K8S application using Terraform."""
 
     _ADDONS_CONFIG = K8S_ADDONS_CONFIG_KEY
+    _ANNOTATIONS_KEY = K8S_CONFIG_KEY + "_ANNOTATIONS"
+    # the set of charms/services that need a load-balancer
+    _LB_CHARM_APPS = [
+        "traefik-public-k8s",
+        "traefik-k8s",
+        "traefik-rgw-k8s",
+        "rabbitmq-k8s",
+        "ovn-relay-k8s",
+        "designate-bind-k8s",
+        "mysql-router-k8s",
+    ]
 
     def __init__(
         self,
