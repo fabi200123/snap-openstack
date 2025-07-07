@@ -224,6 +224,27 @@ class CoreConfig(pydantic.BaseModel):
     external_network: _ExternalNetwork | None = None
     microceph_config: pydantic.RootModel[dict[str, _HostMicroCephConfig]] | None = None
 
+    class _ReservationEntry(pydantic.BaseModel):
+        loadbalancer_ip: str | None = pydantic.Field(
+            default=None,
+            alias="loadbalancer-ip",
+            description="Static IP to reserve for this service's LoadBalancer",
+        )
+
+    reservations: dict[str, _ReservationEntry] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Map of '<model>.<appname>' → {loadbalancer-ip: string},\n"
+            "allowing pre-reservation of specific LoadBalancer IPs.\n"
+            "Example:\n"
+            "  reservations:\n"
+            "    openstack.traefik-public-k8s:\n"
+            "      loadbalancer-ip: 172.16.15.42\n"
+            "    openstack.mysql-router-k8s:\n"
+            "      loadbalancer-ip: 172.16.15.43\n"
+        ),
+    )
+
 
 class CoreManifest(pydantic.BaseModel):
     config: CoreConfig = CoreConfig()
