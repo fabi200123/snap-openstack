@@ -295,21 +295,16 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         return True
 
     def _expand_range(self, cidr_or_range: str) -> list[str]:
-        """Turn '10.0.0.5-10.0.0.10,10.0.1.0/30' → list of IP strings."""
-        ips: list[str] = []
+        ips = []
         for part in cidr_or_range.split(","):
             part = part.strip()
             if not part:
                 continue
             if "-" in part:
-                start, end = part.split("-", 1)
-                a = ipaddress.ip_address(start.strip())
-                b = ipaddress.ip_address(end.strip())
-                # inclusive
-                for i in range(int(a), int(b) + 1):
+                start, end = (ipaddress.ip_address(x.strip()) for x in part.split("-",1))
+                for i in range(int(start), int(end) + 1):
                     ips.append(str(ipaddress.ip_address(i)))
             else:
-                # a CIDR
                 net = ipaddress.ip_network(part, strict=False)
                 for h in net.hosts():
                     ips.append(str(h))
@@ -317,67 +312,52 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
     def _collect_reservations(self) -> dict[str, str]:
         model = self.deployment.name
-        answers = load_answers(self.client, self._ADDONS_CONFIG)["k8s-addons"]
+        ans = load_answers(self.client, self._ADDONS_CONFIG)["k8s-addons"]
 
-        # 1) manifest‐preseeded
-        reservations: dict[str, str] = {
+        # 1) manifest-provided
+        res = {
             k: v.loadbalancer_ip
             for k, v in (self.manifest.core.config.reservations or {}).items()
             if v.loadbalancer_ip
         }
 
-        # 2) user‐provided explicit
-        if answers.get("reserve_ext_ips", "n") == "y":
-            explicit_map = {
+        # 2) user-explicit
+        if ans.get("reserve_ext_ips","n") == "y":
+            mapping = {
                 "ext_ip_traefik_public": f"{model}.traefik-public-k8s",
                 "ext_ip_traefik_internal": f"{model}.traefik-k8s",
                 "ext_ip_traefik_rgw": f"{model}.traefik-rgw-k8s",
             }
-            for key, manifest_key in explicit_map.items():
-                ip = answers.get(key)
+            for prompt, key in mapping.items():
+                ip = ans.get(prompt)
                 if ip:
-                    reservations[manifest_key] = ip
+                    res[key] = ip
 
-        # 3) auto-assign the rest, in order
-        #    - first expand the LB range
-        lb_range = answers.get("loadbalancer") or ""
-        all_ips = self._expand_range(lb_range)
-
-        #    - drop the first IP if manual-bootstrap-on-k8s
+        # 3) auto-assign remainder
+        all_ips = self._expand_range(ans.get("loadbalancer","") or "")
         if "--config=bootstrap-on-k8s" in self.manifest.core.software.juju.bootstrap_args:
             all_ips = all_ips[1:]
-
-        #    - remove any already-reserved
-        for ip in reservations.values():
+        for ip in res.values():
             if ip in all_ips:
                 all_ips.remove(ip)
 
-        #    - fill out missing apps
         for charm in self._LB_CHARM_APPS:
-            manifest_key = f"{model}.{charm}"
-            if manifest_key not in reservations:
-                try:
-                    ip = all_ips.pop(0)
-                except IndexError:
-                    raise SunbeamException(
-                        f"Ran out of IPs from range {lb_range} when assigning {charm}"
-                    )
-                reservations[manifest_key] = ip
+            key = f"{model}.{charm}"
+            if key not in res:
+                if not all_ips:
+                    raise SunbeamException(f"Out of IPs for {charm}")
+                res[key] = all_ips.pop(0)
 
-        return reservations
+        return res
 
-    def _reserve_service_ips(self, reservations: dict[str, str]) -> None:
+    def _persist_reservations(self, reservations: dict[str,str]) -> None:
+        # store full map in cluster DB
+        update_config(self.client, self._RESERVATIONS_KEY, reservations)
+
+    def _build_loadbalancer_annotations(self, reservations: dict[str,str]) -> dict[str,str]:
+        ann = {}
         for model_app, ip in reservations.items():
-            try:
-                self.client.cluster.reserve_ips(pool="loadbalancer", ips=[ip])
-                LOG.info("Reserved %s → %s", model_app, ip)
-            except Exception as e:
-                raise SunbeamException(f"Failed to reserve {ip} for {model_app}: {e}")
-
-    def _build_loadbalancer_annotations(self, reservations: dict[str, str]) -> dict[str, str]:
-        ann: dict[str, str] = {}
-        for model_app, ip in reservations.items():
-            charm = model_app.split(".", 1)[1]
+            charm = model_app.split(".",1)[1]
             ann[charm] = (
                 f"metallb.universe.tf/ip-allocated-from-pool:loadbalancer,"
                 f"metallb.universe.tf/loadBalancerIPs:{ip}"
@@ -385,18 +365,15 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         return ann
 
     def run(self, status: Status | None = None) -> Result:
-        # on initial deploy: collect, reserve & persist
         if not self.refresh:
             try:
                 reservations = self._collect_reservations()
-                self._reserve_service_ips(reservations)
+                self._persist_reservations(reservations)
             except SunbeamException as e:
                 return Result(ResultType.FAILED, str(e))
-            # store the annotations map in DB
             ann = self._build_loadbalancer_annotations(reservations)
             update_config(self.client, self._ANNOTATIONS_KEY, ann)
 
-        # delegate to parent which invokes Terraform + Juju
         return super().run(status)
 
     def get_application_timeout(self) -> int:
