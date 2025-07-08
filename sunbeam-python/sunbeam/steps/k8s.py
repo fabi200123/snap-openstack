@@ -409,18 +409,18 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         return config_tfvars
 
     def extra_tfvars(self) -> dict:
-        out = {
+        # build reservations and annotations
+        reservations = self._collect_reservations()
+        annotations = self._build_loadbalancer_annotations(reservations)
+
+        return {
             "endpoint_bindings": [
                 {"space": self.deployment.get_space(Networks.MANAGEMENT)},
             ],
             "k8s_config": self._get_k8s_config_tfvars(),
+            # this is the new bit:
+            "loadbalancer_annotations": annotations,
         }
-        # pull our annotations back out
-        try:
-            out["loadbalancer_annotations"] = read_config(self.client, self._ANNOTATIONS_KEY)
-        except ConfigItemNotFoundException:
-            out["loadbalancer_annotations"] = {}
-        return out
 
 
 class AddK8SUnitsStep(AddMachineUnitsStep):
