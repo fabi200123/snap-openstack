@@ -302,7 +302,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         addons = answers.get("k8s-addons", {})
         reservations = addons.get("reservations", {})
         lb_annotations = {
-            app: f"metallb.io/loadBalancerIPs:{ip}"
+            app: f"metallb.io/loadBalancerIPs={ip}"
             for app, ip in reservations.items()
         }
         LOG.info(">>> loadbalancer_annotations = %r", lb_annotations)
