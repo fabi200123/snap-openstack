@@ -141,6 +141,12 @@ def k8s_addons_questions():
             validation_function=validate_cidr_or_ip_ranges,
             description=LOADBALANCER_QUESTION_DESCRIPTION,
         ),
+        "reserve-ips": PromptQuestion(
+            "Reserve external IPs? [y/n]",
+            default_value="n",
+            validation_function=lambda v: v.lower() in ("y", "n"),
+            description="If yes, you will be asked one-by-one for each service.",
+        ),
     }
 
 
@@ -231,6 +237,15 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
             k8s_addons_bank.loadbalancer.ask()
         )
 
+        reserve = k8s_addons_bank.ask("reserve-ips").lower() == "y"
+        self.variables["k8s-addons"]["reserve-ips"] = reserve
+        if reserve:
+            apps = ["traefik-k8s", "traefik-public", "traefik-rgw"]
+            self.variables["k8s-addons"].setdefault("reservations", {})
+            for app in apps:
+                ip = k8s_addons_bank.ask(f"reserve-ip-{app}", default_value="")
+                if ip:
+                    self.variables["k8s-addons"]["reservations"][app] = ip
         LOG.debug(self.variables)
         write_answers(self.client, self._ADDONS_CONFIG, self.variables)
 
@@ -279,11 +294,19 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
+        addons = self.variables.get("k8s-addons", {})
+        reservations = addons.get("reservations", {})
+        # Turn into annotations strings:
+        lb_annotations = {
+            app: "metallb.io/loadBalancerIPs:" + ip
+            for app, ip in reservations.items()
+        }
         return {
             "endpoint_bindings": [
                 {"space": self.deployment.get_space(Networks.MANAGEMENT)},
             ],
             "k8s_config": self._get_k8s_config_tfvars(),
+            "loadbalancer_annotations": lb_annotations,
         }
 
 
