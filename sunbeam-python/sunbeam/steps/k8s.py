@@ -305,6 +305,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
             app: f"metallb.io/loadBalancerIPs:{ip}"
             for app, ip in reservations.items()
         }
+        LOG.info(">>> loadbalancer_annotations = %r", lb_annotations)
         return {
             "endpoint_bindings": [
                 {"space": self.deployment.get_space(Networks.MANAGEMENT)},
