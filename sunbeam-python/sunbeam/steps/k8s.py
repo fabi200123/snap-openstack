@@ -235,27 +235,18 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         )
         self.variables["k8s-addons"]["loadbalancer"] = k8s_addons_bank.loadbalancer.ask()
 
-        # now ask whether to reserve
         reserve = k8s_addons_bank.reserve_ips.ask().lower() == "y"
         self.variables["k8s-addons"]["reserve_ips"] = reserve
         if reserve:
-            # list of charms/apps you want to prompt for
-            to_reserve = [
-                "traefik-k8s",
-                "traefik-public",
-                "traefik-rgw",
-                "designate-bind-k8s",
-            ]
             self.variables["k8s-addons"].setdefault("reservations", {})
-            for app in to_reserve:
-                # dynamically add questions
+            # for each service that supports loadbalancer_annotations
+            for app in ("traefik-k8s", "traefik-public", "traefik-rgw"):
                 q = PromptQuestion(
-                    f"Reserve IP for {app}",
+                    f"Reserve external IP for {app}",
                     default_value="",
-                    description=f"Load-balancer IP to use for {app}",
+                    description=f"Enter the load-balancer IP to use for {app}",
                 )
-                setattr(k8s_addons_bank.questions, app.replace("-", "_"), q)
-                ip = getattr(k8s_addons_bank, app.replace("-", "_")).ask()
+                ip = q.ask()
                 if ip:
                     self.variables["k8s-addons"]["reservations"][app] = ip
 
