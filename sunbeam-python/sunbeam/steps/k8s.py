@@ -358,7 +358,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
     def _build_loadbalancer_annotations(self, reservations: dict[str,str]) -> dict[str,str]:
         ann: dict[str,str] = {}
         for model_app, ip in reservations.items():
-            _, charm = model_app.split(".", 1)
+            charm = model_app.split(".",1)[1]
             ann[charm] = (
                 f"metallb.io/ip-allocated-from-pool=metallb-loadbalancer-ck-loadbalancer,"
                 f"metallb.io/loadBalancerIPs={ip}"
