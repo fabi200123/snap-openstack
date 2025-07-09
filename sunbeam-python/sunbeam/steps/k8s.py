@@ -281,6 +281,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
             self.variables["k8s-addons"]["ext_ip_traefik_rgw"] = k8s_addons_bank.ext_ip_traefik_rgw.ask()
 
         LOG.debug(self.variables)
+        LOG.debug(f"Stored answers: {self.variables}")
         write_answers(self.client, self._ADDONS_CONFIG, self.variables)
 
     def has_prompts(self) -> bool:
@@ -358,12 +359,13 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
     def _build_loadbalancer_annotations(self, reservations: dict[str,str]) -> dict[str,str]:
         ann: dict[str,str] = {}
         for model_app, ip in reservations.items():
-            charm = model_app.split(".",1)[1]
-            ann[charm] = (
-                f"metallb.io/ip-allocated-from-pool=metallb-loadbalancer-ck-loadbalancer,"
-                f"metallb.io/loadBalancerIPs={ip}"
-            )
+            charm = model_app.split(".", 1)[1]
+            ann[charm] = json.dumps({
+                "metallb.io/ip-allocated-from-pool": "metallb-loadbalancer-ck-loadbalancer",
+                "metallb.io/loadBalancerIPs": ip,
+            })
         return ann
+
 
     def run(self, status: Status | None = None) -> Result:
         if not self.refresh:
