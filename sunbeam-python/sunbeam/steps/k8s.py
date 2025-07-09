@@ -298,11 +298,11 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
-        addons = self.variables.get("k8s-addons", {})
+        answers = read_config(self.client, self._ADDONS_CONFIG)
+        addons = answers.get("k8s-addons", {})
         reservations = addons.get("reservations", {})
-        # Turn into annotations strings:
         lb_annotations = {
-            app: "metallb.io/loadBalancerIPs:" + ip
+            app: f"metallb.io/loadBalancerIPs:{ip}"
             for app, ip in reservations.items()
         }
         return {
