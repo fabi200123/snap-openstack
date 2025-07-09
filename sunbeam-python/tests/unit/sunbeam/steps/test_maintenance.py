@@ -10,11 +10,14 @@ from watcherclient import v1 as watcher
 from sunbeam.core.common import ResultType, SunbeamException
 from sunbeam.core.juju import ActionFailedException, UnitNotFoundException
 from sunbeam.steps.maintenance import (
+    CordonControlRoleNodeStep,
     CreateWatcherAuditStepABC,
     CreateWatcherHostMaintenanceAuditStep,
     CreateWatcherWorkloadBalancingAuditStep,
+    DrainControlRoleNodeStep,
     MicroCephActionStep,
     RunWatcherAuditStep,
+    UncordonControlRoleNodeStep,
 )
 from sunbeam.steps.microceph import APPLICATION as _MICROCEPH_APPLICATION
 
@@ -226,3 +229,57 @@ class TestRunWatcherAuditStep:
         mock_watcher_helper.get_actions.assert_called_once_with(
             client=mock_watcher_client, audit=mock_audit
         )
+
+
+class TestDrainControlRoleNodeStep:
+    def test_run(self):
+        with patch("sunbeam.steps.maintenance.DrainK8SUnitStep.run") as parent_run:
+            step = DrainControlRoleNodeStep(
+                "fake-node", Mock(), Mock(), "fake-model", dry_run=False
+            )
+            step.run(Mock())
+            parent_run.assert_called_once()
+
+    def test_dry_run(self):
+        with patch("sunbeam.steps.maintenance.DrainK8SUnitStep.run") as parent_run:
+            step = DrainControlRoleNodeStep(
+                "fake-node", Mock(), Mock(), "fake-model", dry_run=True
+            )
+            step.run(Mock())
+            parent_run.assert_not_called()
+
+
+class TestCordonControlRoleNodeStep:
+    def test_run(self):
+        with patch("sunbeam.steps.maintenance.CordonK8SUnitStep.run") as parent_run:
+            step = CordonControlRoleNodeStep(
+                "fake-node", Mock(), Mock(), "fake-model", dry_run=False
+            )
+            step.run(Mock())
+            parent_run.assert_called_once()
+
+    def test_dry_run(self):
+        with patch("sunbeam.steps.maintenance.CordonK8SUnitStep.run") as parent_run:
+            step = CordonControlRoleNodeStep(
+                "fake-node", Mock(), Mock(), "fake-model", dry_run=True
+            )
+            step.run(Mock())
+            parent_run.assert_not_called()
+
+
+class TestUncordonControlRoleNodeStep:
+    def test_run(self):
+        with patch("sunbeam.steps.maintenance.UncordonK8SUnitStep.run") as parent_run:
+            step = UncordonControlRoleNodeStep(
+                "fake-node", Mock(), Mock(), "fake-model", dry_run=False
+            )
+            step.run(Mock())
+            parent_run.assert_called_once()
+
+    def test_dry_run(self):
+        with patch("sunbeam.steps.maintenance.UncordonK8SUnitStep.run") as parent_run:
+            step = UncordonControlRoleNodeStep(
+                "fake-node", Mock(), Mock(), "fake-model", dry_run=True
+            )
+            step.run(Mock())
+            parent_run.assert_not_called()

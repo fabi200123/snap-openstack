@@ -536,6 +536,26 @@ def test_get_secret_not_found(jhelper, juju):
         jhelper.get_secret("test-model", "secret-id")
 
 
+def test_get_app_config_success(jhelper, juju):
+    test_config = {"key": "value"}
+    juju.config.return_value = test_config
+    config = jhelper.get_app_config("test-app", "test-model")
+    assert test_config == config
+    juju.config.assert_called()
+
+
+def test_get_app_config_not_found(jhelper, juju):
+    juju.config.side_effect = jubilant.CLIError(1, "config", stderr="not found")
+    with pytest.raises(jujulib.ApplicationNotFoundException):
+        jhelper.get_app_config("test-app", "test-model")
+
+
+def test_get_app_config_fail(jhelper, juju):
+    juju.config.side_effect = jubilant.CLIError(1, "config", stderr="fail")
+    with pytest.raises(jujulib.JujuException):
+        jhelper.get_secret("test-app", "test-model")
+
+
 def test_jhelper_add_k8s_cloud(jhelper: jujulib.JujuHelper):
     kubeconfig = yaml.safe_load(kubeconfig_yaml)
     jhelper.add_k8s_cloud("k8s", "k8s-creds", kubeconfig)
