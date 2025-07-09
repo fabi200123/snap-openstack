@@ -141,11 +141,11 @@ def k8s_addons_questions():
             validation_function=validate_cidr_or_ip_ranges,
             description=LOADBALANCER_QUESTION_DESCRIPTION,
         ),
-        "reserve-ips": PromptQuestion(
+        "reserve_ips": PromptQuestion(
             "Reserve external IPs? [y/n]",
             default_value="n",
             validation_function=lambda v: v.lower() in ("y", "n"),
-            description="If yes, you will be asked one-by-one for each service.",
+            description="If yes, you will be asked for each service.",
         ),
     }
 
@@ -233,19 +233,32 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
             accept_defaults=self.accept_defaults,
             show_hint=show_hint,
         )
-        self.variables["k8s-addons"]["loadbalancer"] = (
-            k8s_addons_bank.loadbalancer.ask()
-        )
+        self.variables["k8s-addons"]["loadbalancer"] = k8s_addons_bank.loadbalancer.ask()
 
-        reserve = k8s_addons_bank.ask("reserve-ips").lower() == "y"
-        self.variables["k8s-addons"]["reserve-ips"] = reserve
+        # now ask whether to reserve
+        reserve = k8s_addons_bank.reserve_ips.ask().lower() == "y"
+        self.variables["k8s-addons"]["reserve_ips"] = reserve
         if reserve:
-            apps = ["traefik-k8s", "traefik-public", "traefik-rgw"]
+            # list of charms/apps you want to prompt for
+            to_reserve = [
+                "traefik-k8s",
+                "traefik-public",
+                "traefik-rgw",
+                "designate-bind-k8s",
+            ]
             self.variables["k8s-addons"].setdefault("reservations", {})
-            for app in apps:
-                ip = k8s_addons_bank.ask(f"reserve-ip-{app}", default_value="")
+            for app in to_reserve:
+                # dynamically add questions
+                q = PromptQuestion(
+                    f"Reserve IP for {app}",
+                    default_value="",
+                    description=f"Load-balancer IP to use for {app}",
+                )
+                setattr(k8s_addons_bank.questions, app.replace("-", "_"), q)
+                ip = getattr(k8s_addons_bank, app.replace("-", "_")).ask()
                 if ip:
                     self.variables["k8s-addons"]["reservations"][app] = ip
+
         LOG.debug(self.variables)
         write_answers(self.client, self._ADDONS_CONFIG, self.variables)
 
