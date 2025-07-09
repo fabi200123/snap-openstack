@@ -311,7 +311,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
                 {"space": self.deployment.get_space(Networks.MANAGEMENT)},
             ],
             "k8s_config": self._get_k8s_config_tfvars(),
-            "loadbalancer_annotations": lb_annotations,
+            "loadbalancer_annotations": json.dumps(lb_annotations),
         }
 
 
