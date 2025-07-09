@@ -359,8 +359,8 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         ann = {}
         for model_app, ip in reservations.items():
             ann[model_app] = (
-                f"metallb.universe.tf/ip-allocated-from-pool:loadbalancer,"
-                f"metallb.universe.tf/loadBalancerIPs:{ip}"
+                f"metallb.io/ip-allocated-from-pool,"
+                f"metallb.io/loadBalancerIPs:{ip}"
             )
         return ann
 
