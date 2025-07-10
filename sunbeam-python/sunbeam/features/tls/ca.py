@@ -37,9 +37,7 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.manifest import (
     AddManifestStep,
-    CharmManifest,
     FeatureConfig,
-    SoftwareConfig,
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.features.interface.utils import (

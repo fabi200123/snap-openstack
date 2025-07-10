@@ -143,8 +143,7 @@ parts:
   terraform-openstack-plan:
     after: [terraform]
     plugin: dump
-    source: https://github.com/fabi200123/sunbeam-terraform
-    source-branch: tls-vault-feature
+    source: https://github.com/canonical/sunbeam-terraform
     source-depth: 1
     source-type: git
     organize:

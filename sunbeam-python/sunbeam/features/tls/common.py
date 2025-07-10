@@ -93,8 +93,11 @@ class TlsFeature(OpenStackControlPlaneFeature):
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
         return SoftwareConfig(
-            charms={"manual-tls-certificates": CharmManifest(
-                channel="latest/stable",)}
+            charms={
+                "manual-tls-certificates": CharmManifest(
+                    channel="latest/stable",
+                )
+            }
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:
@@ -375,10 +378,9 @@ def certificate_questions(unit: str, subject: str):
 def get_outstanding_certificate_requests(
     app: str, model: str, jhelper: JujuHelper
 ) -> dict:
-    """Get outstanding certificate requests from manual-tls-certificate
-    operator.
+    """Get outstanding certificate requests from manual-tls-certificate operator.
 
-    Returns the result from the action get-outstanding-certificate-requests
+    Returns the result from the action get-outstanding-certificate-requests.
     Raises LeaderNotFoundException, ActionFailedException.
     """
     action_cmd = "get-outstanding-certificate-requests"

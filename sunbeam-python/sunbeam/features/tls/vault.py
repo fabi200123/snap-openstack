@@ -15,9 +15,7 @@ from rich.status import Status
 from rich.table import Table
 
 from sunbeam.clusterd.client import Client
-from sunbeam.clusterd.service import (
-    ConfigItemNotFoundException,
-)
+from sunbeam.clusterd.service import ConfigItemNotFoundException
 from sunbeam.core import questions
 from sunbeam.core.common import (
     FORMAT_TABLE,
@@ -25,10 +23,10 @@ from sunbeam.core.common import (
     BaseStep,
     Result,
     ResultType,
+    SunbeamException,
     read_config,
     run_plan,
     str_presenter,
-    SunbeamException,
 )
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import (
@@ -39,10 +37,7 @@ from sunbeam.core.juju import (
     TimeoutException,
     run_sync,
 )
-from sunbeam.core.manifest import (
-    AddManifestStep,
-    FeatureConfig,
-)
+from sunbeam.core.manifest import AddManifestStep, FeatureConfig
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.features.interface.utils import (
     encode_base64_as_string,
@@ -62,10 +57,7 @@ from sunbeam.features.tls.common import (
     certificate_questions,
     get_outstanding_certificate_requests,
 )
-from sunbeam.features.vault.feature import (
-    VaultHelper,
-    VaultCommandFailedException,
-)
+from sunbeam.features.vault.feature import VaultCommandFailedException, VaultHelper
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
 CERTIFICATE_FEATURE_KEY = "TlsProvider"
@@ -155,16 +147,14 @@ class ConfigureVaultCAStep(BaseStep):
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
             if not subject:
-                raise click.ClickException(
-                    f"Not a valid CSR for unit {unit_name}")
+                raise click.ClickException(f"Not a valid CSR for unit {unit_name}")
 
             cert_questions = certificate_questions(unit_name, subject)
             certificates_bank = questions.QuestionBank(
                 questions=cert_questions,
                 console=console,
                 preseed=self.preseed.get("certificates", {}).get(subject),
-                previous_answers=variables.get(
-                    "certificates", {}).get(subject),
+                previous_answers=variables.get("certificates", {}).get(subject),
                 show_hint=show_hint,
             )
             cert = certificates_bank.certificate.ask()
@@ -217,8 +207,7 @@ class ConfigureVaultCAStep(BaseStep):
             LOG.debug(f"Running action {action_cmd}")
             try:
                 action_result = run_sync(
-                    self.jhelper.run_action(
-                        unit, self.model, action_cmd, action_params)
+                    self.jhelper.run_action(unit, self.model, action_cmd, action_params)
                 )
             except ActionFailedException as e:
                 LOG.debug(f"Running action {action_cmd} on {unit}")
@@ -227,8 +216,7 @@ class ConfigureVaultCAStep(BaseStep):
             LOG.debug(f"Result from action {action_cmd}: {action_result}")
             if action_result.get("return-code", 0) > 1:
                 return Result(
-                    ResultType.FAILED,
-                    f"Action {action_cmd} on {unit} returned error"
+                    ResultType.FAILED, f"Action {action_cmd} on {unit} returned error"
                 )
 
         return Result(ResultType.COMPLETED)
@@ -324,7 +312,8 @@ class VaultTlsFeature(TlsFeature):
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
             "traefik-to-tls-provider": CA_APP_NAME,
-            "manual-tls-certificates-channel": "1/stable"}
+            "manual-tls-certificates-channel": "1/stable",
+        }
         if "public" in config.endpoints:
             tfvars.update({"enable-tls-for-public-endpoint": True})
         if "internal" in config.endpoints:
@@ -336,8 +325,7 @@ class VaultTlsFeature(TlsFeature):
 
     def set_tfvars_on_disable(self, deployment: Deployment) -> dict:
         """Set terraform variables to disable the application."""
-        tfvars: dict[str, None | str | bool] = {
-            "traefik-to-tls-provider": None}
+        tfvars: dict[str, None | str | bool] = {"traefik-to-tls-provider": None}
         provider_config = self.provider_config(deployment)
         endpoints = provider_config.get("endpoints", [])
         if "public" in endpoints:
@@ -363,16 +351,14 @@ class VaultTlsFeature(TlsFeature):
         help="Output format",
     )
     @pass_method_obj
-    def list_outstanding_csrs(self, deployment: Deployment,
-                              format: str) -> None:
+    def list_outstanding_csrs(self, deployment: Deployment, format: str) -> None:
         """List outstanding CSRs."""
         app = "manual-tls-certificates"
         model = OPENSTACK_MODEL
         action_cmd = "get-outstanding-certificate-requests"
         jhelper = JujuHelper(deployment.get_connected_controller())
         try:
-            action_result = get_outstanding_certificate_requests(
-                app, model, jhelper)
+            action_result = get_outstanding_certificate_requests(app, model, jhelper)
         except LeaderNotFoundException as e:
             LOG.debug(f"Unable to get {app} leader to print CSRs")
             raise click.ClickException(str(e))
@@ -390,8 +376,8 @@ class VaultTlsFeature(TlsFeature):
         csrs = {
             relation: csr
             for record in certs_to_process
-            if (relation := str(record.get("relation_id"))) and (
-                csr := record.get("csr"))
+            if (relation := str(record.get("relation_id")))
+            and (csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
@@ -425,8 +411,7 @@ class VaultTlsFeature(TlsFeature):
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
         preseed = {}
-        if (ca := manifest.get_feature(
-             self.name.split(".")[-1])) and ca.config:
+        if (ca := manifest.get_feature(self.name.split(".")[-1])) and ca.config:
             preseed = ca.config.model_dump(by_alias=True)
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
@@ -455,8 +440,7 @@ class VaultTlsFeature(TlsFeature):
             # endpoint, update the identity-service relation data on every
             # related application.
             WaitForApplicationsStep(
-                jhelper, apps_to_monitor, model,
-                INGRESS_CHANGE_APPLICATION_TIMEOUT
+                jhelper, apps_to_monitor, model, INGRESS_CHANGE_APPLICATION_TIMEOUT
             ),
         ]
         run_plan(plan, console, show_hints)
@@ -483,9 +467,7 @@ class VaultTlsFeature(TlsFeature):
         """Check if Vault is deployed, initialized, and authorized."""
         model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
         try:
-            leader = run_sync(
-                jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
-            )
+            leader = run_sync(jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL))
         except SunbeamException:
             raise click.ClickException(
                 "Cannot enable TLS Vault because Vault is not deployed. "
@@ -497,8 +479,7 @@ class VaultTlsFeature(TlsFeature):
         unit = app.units[0] if app.units else None
         if not unit:
             raise click.ClickException(
-                "Vault application has no units. "
-                "Please deploy Vault first."
+                "Vault application has no units. Please deploy Vault first."
             )
         status = unit.workload_status
         message = unit.workload_status_message
@@ -532,8 +513,7 @@ class VaultTlsFeature(TlsFeature):
             # application is still in blocked state, but shows the message
             # "Please initialize Vault or integrate
             # with an auto-unseal provider"
-            if "authorize" in message.lower() \
-                 or "initialize" in message.lower():
+            if "authorize" in message.lower() or "initialize" in message.lower():
                 raise click.ClickException(
                     "Vault is not authorized. Please run "
                     "`sunbeam vault authorize-charm` first."
@@ -545,8 +525,7 @@ class VaultTlsFeature(TlsFeature):
         """Return model relations for the provided endpoints."""
         relations = []
         model_status = run_sync(self.jhelper.get_model_status(model))
-        model_relations = [r.get("key") for r in model_status.get(
-            "relations", {})]
+        model_relations = [r.get("key") for r in model_status.get("relations", {})]
         for endpoint in endpoints:
             for relation in model_relations:
                 if endpoint in relation:
@@ -567,8 +546,7 @@ class VaultTlsFeature(TlsFeature):
         jhelper = JujuHelper(deployment.get_connected_controller())
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
-                "Cannot enable TLS Vault as Vault is not enabled. "
-                "Enable Vault first."
+                "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
             )
 
         model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
@@ -600,11 +578,7 @@ class VaultTlsFeature(TlsFeature):
                 f"the following endpoint(s) were missing one: {', '.join(missing)}"
             )
 
-        domains = {
-            h.split(".", 1)[1]
-            for h in external_map.values()
-            if "." in h
-        }
+        domains = {h.split(".", 1)[1] for h in external_map.values() if "." in h}
         if len(domains) != 1:
             raise click.ClickException(
                 "Traefik charms must share one domain; found: "
