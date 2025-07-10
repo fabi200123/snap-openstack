@@ -346,7 +346,6 @@ class VaultTlsFeature(TlsFeature):
         )
         self.enable_feature(deployment, cfg, show_hints)
 
-
     @click.command()
     @click_option_show_hints
     @pass_method_obj
@@ -365,7 +364,7 @@ class VaultTlsFeature(TlsFeature):
         """Set terraform variables to enable the application."""
         tfvars: dict[str, str | bool] = {
             "traefik-to-tls-provider": CA_APP_NAME,
-            "manual-tls-certificates-channel": "latest/stable"}
+            "manual-tls-certificates-channel": "1/stable"}
         if "public" in config.endpoints:
             tfvars.update({"enable-tls-for-public-endpoint": True})
         if "internal" in config.endpoints:
