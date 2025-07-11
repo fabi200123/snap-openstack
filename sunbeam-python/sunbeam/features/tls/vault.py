@@ -461,7 +461,6 @@ class VaultTlsFeature(TlsFeature):
 
     def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
         """Check if Vault is deployed, initialized, and authorized."""
-        model = jhelper.get_model(OPENSTACK_MODEL)
         try:
             leader = jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
         except SunbeamException:
@@ -471,7 +470,7 @@ class VaultTlsFeature(TlsFeature):
             )
 
         vhelper = VaultHelper(jhelper)
-        app = jhelper.get_application(CA_APP_NAME, model)
+        app = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
         unit = app.units[0] if app.units else None
         if not unit:
             raise click.ClickException(
