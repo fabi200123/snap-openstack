@@ -586,13 +586,17 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        vault_app = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
-        vault_cfg = vault_app.get_config()
+        vault_cfg = jhelper.get_application_config(CA_APP_NAME, OPENSTACK_MODEL)
         current = vault_cfg.get("common_name", {}).get("value")
         if current != common_domain:
             try:
-                vault_app.set_config({"common_name": common_domain})
+                # push the new common_name via JujuHelper
+                jhelper.set_application_config(
+                    CA_APP_NAME,
+                    OPENSTACK_MODEL,
+                    {"common_name": common_domain},
+                )
                 console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
-            except Exception as e:
+            except JujuException as e:
                 LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
                 raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
