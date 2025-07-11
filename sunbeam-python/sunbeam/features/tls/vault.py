@@ -35,7 +35,6 @@ from sunbeam.core.juju import (
     JujuHelper,
     LeaderNotFoundException,
     TimeoutException,
-    run_sync,
 )
 from sunbeam.core.manifest import AddManifestStep, FeatureConfig
 from sunbeam.core.openstack import OPENSTACK_MODEL
@@ -185,7 +184,7 @@ class ConfigureVaultCAStep(BaseStep):
         """Run configure steps."""
         action_cmd = "provide-certificate"
         try:
-            unit = run_sync(self.jhelper.get_leader_unit(self.app, self.model))
+            unit = self.jhelper.get_leader_unit(self.app, self.model)
         except LeaderNotFoundException as e:
             LOG.debug(f"Unable to get {self.app} leader")
             return Result(ResultType.FAILED, str(e))
@@ -206,9 +205,7 @@ class ConfigureVaultCAStep(BaseStep):
 
             LOG.debug(f"Running action {action_cmd}")
             try:
-                action_result = run_sync(
-                    self.jhelper.run_action(unit, self.model, action_cmd, action_params)
-                )
+                action_result = self.jhelper.run_action(unit, self.model, action_cmd, action_params)
             except ActionFailedException as e:
                 LOG.debug(f"Running action {action_cmd} on {unit}")
                 return Result(ResultType.FAILED, str(e))
@@ -356,7 +353,7 @@ class VaultTlsFeature(TlsFeature):
         app = "manual-tls-certificates"
         model = OPENSTACK_MODEL
         action_cmd = "get-outstanding-certificate-requests"
-        jhelper = JujuHelper(deployment.get_connected_controller())
+        jhelper = JujuHelper(deployment.juju_controller())
         try:
             action_result = get_outstanding_certificate_requests(app, model, jhelper)
         except LeaderNotFoundException as e:
@@ -426,7 +423,7 @@ class VaultTlsFeature(TlsFeature):
         if ca is None or ca_chain is None:
             raise click.ClickException("CA and CA Chain not configured")
 
-        jhelper = JujuHelper(deployment.get_connected_controller())
+        jhelper = JujuHelper(deployment.juju_controller())
         plan = [
             AddManifestStep(client, manifest_path),
             ConfigureVaultCAStep(
@@ -465,9 +462,9 @@ class VaultTlsFeature(TlsFeature):
 
     def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
         """Check if Vault is deployed, initialized, and authorized."""
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        model = jhelper.get_model(OPENSTACK_MODEL)
         try:
-            leader = run_sync(jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL))
+            leader = jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
         except SunbeamException:
             raise click.ClickException(
                 "Cannot enable TLS Vault because Vault is not deployed. "
@@ -475,7 +472,7 @@ class VaultTlsFeature(TlsFeature):
             )
 
         vhelper = VaultHelper(jhelper)
-        app = run_sync(jhelper.get_application(CA_APP_NAME, model))
+        app = jhelper.get_application(CA_APP_NAME, model)
         unit = app.units[0] if app.units else None
         if not unit:
             raise click.ClickException(
@@ -494,7 +491,7 @@ class VaultTlsFeature(TlsFeature):
         except (TimeoutException, JujuException) as e:
             raise click.ClickException(f"Unable to contact Vault: {e}")
         finally:
-            run_sync(model.disconnect())
+            model.disconnect()
 
         if not vault_status.get("initialized", False):
             raise click.ClickException(
@@ -524,7 +521,7 @@ class VaultTlsFeature(TlsFeature):
     def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
         """Return model relations for the provided endpoints."""
         relations = []
-        model_status = run_sync(self.jhelper.get_model_status(model))
+        model_status = self.jhelper.get_model_status(model)
         model_relations = [r.get("key") for r in model_status.get("relations", {})]
         for endpoint in endpoints:
             for relation in model_relations:
@@ -543,13 +540,13 @@ class VaultTlsFeature(TlsFeature):
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
 
-        jhelper = JujuHelper(deployment.get_connected_controller())
+        jhelper = JujuHelper(deployment.juju_controller())
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
                 "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
             )
 
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
+        model = jhelper.get_model(OPENSTACK_MODEL)
         app_map = {
             "public": "traefik-public",
             "internal": "traefik",
@@ -564,8 +561,8 @@ class VaultTlsFeature(TlsFeature):
                 LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            app = run_sync(jhelper.get_application(app_name, model))
-            cfg = run_sync(app.get_config())
+            app = jhelper.get_application(app_name, model)
+            cfg = app.get_config()
             hostname = cfg.get("external_hostname", {}).get("value")
             if not hostname:
                 missing.append(endpoint)
@@ -586,11 +583,12 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        vault_app = run_sync(jhelper.get_application(CA_APP_NAME, model))
-        current = run_sync(vault_app.get_config()).get("common_name", {}).get("value")
+        vault_app = jhelper.get_application(CA_APP_NAME, model)
+        vault_cfg = vault_app.get_config()
+        current = vault_cfg.get("common_name", {}).get("value")
         if current != common_domain:
             try:
-                run_sync(vault_app.set_config({"common_name": common_domain}))
+                vault_app.set_config({"common_name": common_domain})
                 console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
             except Exception as e:
                 LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
