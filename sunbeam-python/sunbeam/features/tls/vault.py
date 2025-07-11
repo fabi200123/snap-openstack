@@ -480,8 +480,12 @@ class VaultTlsFeature(TlsFeature):
             raise click.ClickException(
                 "Vault application has no units. Please deploy Vault first."
             )
-        status = unit.workload_status
-        message = unit.workload_status_message
+        status = getattr(unit, "workload_status", None) or getattr(unit, "workload", "")
+        if hasattr(unit, "workload_status_message"):
+            message = unit.workload_status_message or ""
+        else:
+            info = getattr(unit, "workload_status_info", {}) or {}
+            message = info.get("message", "")
 
         if status == "active":
             return True
