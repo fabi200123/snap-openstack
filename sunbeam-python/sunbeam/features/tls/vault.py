@@ -564,8 +564,7 @@ class VaultTlsFeature(TlsFeature):
                 LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            app = jhelper.get_application(app_name, OPENSTACK_MODEL)
-            cfg = app.get_config()
+            cfg = jhelper.get_application_config(app_name, OPENSTACK_MODEL)
             hostname = cfg.get("external_hostname", {}).get("value")
             if not hostname:
                 missing.append(endpoint)
