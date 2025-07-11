@@ -34,7 +34,6 @@ from sunbeam.core.juju import (
     JujuException,
     JujuHelper,
     LeaderNotFoundException,
-    TimeoutError,
 )
 from sunbeam.core.manifest import AddManifestStep, FeatureConfig
 from sunbeam.core.openstack import OPENSTACK_MODEL
