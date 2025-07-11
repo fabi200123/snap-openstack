@@ -461,7 +461,6 @@ class VaultTlsFeature(TlsFeature):
 
     def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
         """Check if Vault is deployed, initialized, and authorized."""
-        model = jhelper.connect_model(OPENSTACK_MODEL)
         try:
             leader = jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
         except SunbeamException:
@@ -497,8 +496,6 @@ class VaultTlsFeature(TlsFeature):
             raise click.ClickException(f"Error querying Vault status: {e}")
         except (TimeoutError, JujuException) as e:
             raise click.ClickException(f"Unable to contact Vault: {e}")
-        finally:
-            model.disconnect()
 
         if not vault_status.get("initialized", False):
             raise click.ClickException(
