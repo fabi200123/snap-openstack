@@ -587,7 +587,11 @@ class VaultTlsFeature(TlsFeature):
         common_domain = domains.pop()
 
         with jhelper._model(OPENSTACK_MODEL):
-            vault_cfg = jhelper.cli("config", CA_APP_NAME)
+            vault_cfg = jhelper.cli(
+                "config",
+                CA_APP_NAME,
+                include_controller=False,
+            )
         current = vault_cfg.get("common_name", {}).get("value")
         if current != common_domain:
             try:
@@ -597,6 +601,7 @@ class VaultTlsFeature(TlsFeature):
                         CA_APP_NAME,
                         f"common_name={common_domain}",
                         json_format=False,
+                        include_controller=False,
                     )
                 console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
             except Exception as e:
