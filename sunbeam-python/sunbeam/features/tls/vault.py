@@ -471,7 +471,11 @@ class VaultTlsFeature(TlsFeature):
 
         vhelper = VaultHelper(jhelper)
         app = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
-        unit = app.units[0] if app.units else None
+        if isinstance(app.units, dict):
+            units = list(app.units.values())
+        else:
+            units = app.units
+        unit = units[0] if units else None
         if not unit:
             raise click.ClickException(
                 "Vault application has no units. Please deploy Vault first."
