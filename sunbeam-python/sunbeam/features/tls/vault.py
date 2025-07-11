@@ -352,7 +352,7 @@ class VaultTlsFeature(TlsFeature):
         app = "manual-tls-certificates"
         model = OPENSTACK_MODEL
         action_cmd = "get-outstanding-certificate-requests"
-        jhelper = JujuHelper(deployment.juju_controller())
+        jhelper = JujuHelper(deployment.juju_controller)
         try:
             action_result = get_outstanding_certificate_requests(app, model, jhelper)
         except LeaderNotFoundException as e:
@@ -422,7 +422,7 @@ class VaultTlsFeature(TlsFeature):
         if ca is None or ca_chain is None:
             raise click.ClickException("CA and CA Chain not configured")
 
-        jhelper = JujuHelper(deployment.juju_controller())
+        jhelper = JujuHelper(deployment.juju_controller)
         plan = [
             AddManifestStep(client, manifest_path),
             ConfigureVaultCAStep(
@@ -539,7 +539,7 @@ class VaultTlsFeature(TlsFeature):
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
 
-        jhelper = JujuHelper(deployment.juju_controller())
+        jhelper = JujuHelper(deployment.juju_controller)
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
                 "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
