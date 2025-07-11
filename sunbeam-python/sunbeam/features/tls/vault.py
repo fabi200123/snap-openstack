@@ -550,7 +550,6 @@ class VaultTlsFeature(TlsFeature):
                 "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
             )
 
-        model = jhelper.get_model(OPENSTACK_MODEL)
         app_map = {
             "public": "traefik-public",
             "internal": "traefik",
@@ -565,7 +564,7 @@ class VaultTlsFeature(TlsFeature):
                 LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            app = jhelper.get_application(app_name, model)
+            app = jhelper.get_application(app_name, OPENSTACK_MODEL)
             cfg = app.get_config()
             hostname = cfg.get("external_hostname", {}).get("value")
             if not hostname:
@@ -587,7 +586,7 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        vault_app = jhelper.get_application(CA_APP_NAME, model)
+        vault_app = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
         vault_cfg = vault_app.get_config()
         current = vault_cfg.get("common_name", {}).get("value")
         if current != common_domain:
