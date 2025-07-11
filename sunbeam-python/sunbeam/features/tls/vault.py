@@ -564,7 +564,8 @@ class VaultTlsFeature(TlsFeature):
                 LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            cfg = jhelper.get_application_config(app_name, OPENSTACK_MODEL)
+            with jhelper._model(OPENSTACK_MODEL):
+                cfg = jhelper.cli("config", app_name)
             hostname = cfg.get("external_hostname", {}).get("value")
             if not hostname:
                 missing.append(endpoint)
@@ -585,17 +586,19 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        vault_cfg = jhelper.get_application_config(CA_APP_NAME, OPENSTACK_MODEL)
+        with jhelper._model(OPENSTACK_MODEL):
+            vault_cfg = jhelper.cli("config", CA_APP_NAME)
         current = vault_cfg.get("common_name", {}).get("value")
         if current != common_domain:
             try:
-                # push the new common_name via JujuHelper
-                jhelper.set_application_config(
-                    CA_APP_NAME,
-                    OPENSTACK_MODEL,
-                    {"common_name": common_domain},
-                )
+                with jhelper._model(OPENSTACK_MODEL):
+                    jhelper.cli(
+                        "config",
+                        CA_APP_NAME,
+                        f"common_name={common_domain}",
+                        json_format=False,
+                    )
                 console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
-            except JujuException as e:
+            except Exception as e:
                 LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
                 raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
