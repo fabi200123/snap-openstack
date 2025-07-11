@@ -565,7 +565,7 @@ class VaultTlsFeature(TlsFeature):
                 continue
 
             with jhelper._model(OPENSTACK_MODEL):
-                cfg = jhelper.cli("config", app_name)
+                cfg = jhelper.cli("config", app_name, include_controller=False)
             hostname = cfg.get("external_hostname", {}).get("value")
             if not hostname:
                 missing.append(endpoint)
