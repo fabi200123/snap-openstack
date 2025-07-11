@@ -544,16 +544,15 @@ class VaultTlsFeature(TlsFeature):
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
 
+        # 1) Fail fast if Vault isn't up, unsealed & authorized
         jhelper = JujuHelper(deployment.juju_controller)
-        if not self.is_vault_application_active(jhelper):
-            raise click.ClickException(
-                "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
-            )
+        self.is_vault_application_active(jhelper)
 
+        # 2) Gather each Traefik endpoint's external-hostname
         app_map = {
-            "public": "traefik-public",
+            "public":   "traefik-public",
             "internal": "traefik",
-            "rgw": "traefik-rgw",
+            "rgw":      "traefik-rgw",
         }
         external_map: dict[str, str] = {}
         missing: list[str] = []
@@ -565,8 +564,14 @@ class VaultTlsFeature(TlsFeature):
                 continue
 
             with jhelper._model(OPENSTACK_MODEL):
-                cfg = jhelper.cli("config", app_name, include_controller=False)
-            hostname = cfg.get("external_hostname", {}).get("value")
+                cfg = jhelper.cli(
+                    "config",
+                    app_name,
+                    include_controller=False,
+                    json_format=True,
+                )
+
+            hostname = cfg.get("external-hostname", {}).get("value")
             if not hostname:
                 missing.append(endpoint)
             else:
@@ -574,10 +579,11 @@ class VaultTlsFeature(TlsFeature):
 
         if missing:
             raise click.ClickException(
-                "TLS Vault requires every endpoint to have an external_hostname;\n"
+                "TLS Vault requires every endpoint to have an external-hostname;\n"
                 f"the following endpoint(s) were missing one: {', '.join(missing)}"
             )
 
+        # 3) Make sure they all share the same domain
         domains = {h.split(".", 1)[1] for h in external_map.values() if "." in h}
         if len(domains) != 1:
             raise click.ClickException(
@@ -586,11 +592,13 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
+        # 4) Finally, bump vault.common_name if it doesn't match
         with jhelper._model(OPENSTACK_MODEL):
             vault_cfg = jhelper.cli(
                 "config",
                 CA_APP_NAME,
                 include_controller=False,
+                json_format=True,
             )
         current = vault_cfg.get("common_name", {}).get("value")
         if current != common_domain:
