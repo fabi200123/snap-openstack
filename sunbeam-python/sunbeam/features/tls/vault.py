@@ -34,7 +34,7 @@ from sunbeam.core.juju import (
     JujuException,
     JujuHelper,
     LeaderNotFoundException,
-    TimeoutException,
+    TimeoutError,
 )
 from sunbeam.core.manifest import AddManifestStep, FeatureConfig
 from sunbeam.core.openstack import OPENSTACK_MODEL
@@ -488,7 +488,7 @@ class VaultTlsFeature(TlsFeature):
             vault_status = vhelper.get_vault_status(leader)
         except VaultCommandFailedException as e:
             raise click.ClickException(f"Error querying Vault status: {e}")
-        except (TimeoutException, JujuException) as e:
+        except (TimeoutError, JujuException) as e:
             raise click.ClickException(f"Unable to contact Vault: {e}")
         finally:
             model.disconnect()

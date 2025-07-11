@@ -353,10 +353,10 @@ def get_outstanding_certificate_requests(
 ) -> dict:
     """Get outstanding certificate requests from manual-tls-certificate operator.
 
-    Returns the result from the action get-outstanding-certificate-requests.
+    Returns the result from the action get-outstanding-certificate-requests
     Raises LeaderNotFoundException, ActionFailedException.
     """
     action_cmd = "get-outstanding-certificate-requests"
-    unit = run_sync(jhelper.get_leader_unit(app, model))
-    action_result = run_sync(jhelper.run_action(unit, model, action_cmd))
+    unit = jhelper.get_leader_unit(app, model)
+    action_result = jhelper.run_action(unit, model, action_cmd)
     return action_result
