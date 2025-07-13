@@ -348,20 +348,36 @@ class VaultTlsFeature(TlsFeature):
         """Application names handled by the terraform plan."""
         return ["manual-tls-certificates"]
 
-    def set_tfvars_on_enable(
-        self, deployment: Deployment, config: VaultTlsFeatureConfig
-    ) -> dict:
-        """Set terraform variables to enable the application."""
-        tfvars: dict[str, str | bool] = {
+    def set_tfvars_on_enable(self, deployment: Deployment, config: VaultTlsFeatureConfig) -> dict:
+        tfvars = {
             "traefik-to-tls-provider": CA_APP_NAME,
             "manual-tls-certificates-channel": "1/stable",
+            # … your existing flags …
         }
-        if "public" in config.endpoints:
-            tfvars.update({"enable-tls-for-public-endpoint": True})
-        if "internal" in config.endpoints:
-            tfvars.update({"enable-tls-for-internal-endpoint": True})
-        if "rgw" in config.endpoints:
-            tfvars.update({"enable-tls-for-rgw-endpoint": True})
+
+        # compute hostnames exactly as you do in pre_enable
+        jhelper = JujuHelper(deployment.juju_controller)
+        app_map = {"public": "traefik-public", "internal": "traefik", "rgw": "traefik-rgw"}
+        external: dict[str,str] = {}
+        for ep in config.endpoints:
+            stat = jhelper.get_application(app_map[ep], OPENSTACK_MODEL)
+            leader = jhelper.get_leader_unit(app_map[ep], OPENSTACK_MODEL)
+            msg = stat.units[leader].workload_status.message or ""
+            if "Serving at " in msg:
+                external[ep] = msg.split("Serving at ",1)[1].strip()
+
+        # common_name for Vault
+        domains = {h.split(".",1)[1] for h in external.values() if "." in h}
+        vault_cn = domains.pop()
+        tfvars["vault-config"] = {"common_name": vault_cn}
+
+        # external_hostname for each Traefik
+        if "public" in external:
+            tfvars["traefik-public-config"] = {"external_hostname": external["public"]}
+        if "internal" in external:
+            tfvars["traefik-config"] = {"external_hostname": external["internal"]}
+        if "rgw" in external:
+            tfvars["traefik-rgw-config"] = {"external_hostname": external["rgw"]}
 
         return tfvars
 
