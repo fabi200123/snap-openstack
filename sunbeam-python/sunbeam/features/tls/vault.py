@@ -554,18 +554,23 @@ class VaultTlsFeature(TlsFeature):
         external_map: dict[str, str] = {}
         missing: list[str] = []
 
-        for endpoint in config.endpoints:
-            app_name = app_map.get(endpoint)
-            if not app_name:
-                LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
-                continue
+        with jhelper._model(OPENSTACK_MODEL) as juju:
+            for endpoint in config.endpoints:
+                app_name = app_map.get(endpoint)
+                if not app_name:
+                    LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
+                    continue
 
-            cfg = jhelper.cli("config", app_name)
-            hostname = cfg.get("external-hostname", {}).get("value")
-            if not hostname:
-                missing.append(endpoint)
-            else:
-                external_map[endpoint] = hostname
+                # run `juju config <app>` in the OPENSTACK_MODEL,
+                # with no extra --controller flag
+                cfg = jhelper.cli("config", app_name,
+                                  include_controller=False,
+                                  juju=juju)
+                hostname = cfg.get("external-hostname", {}).get("value")
+                if not hostname:
+                    missing.append(endpoint)
+                else:
+                    external_map[endpoint] = hostname
 
         if missing:
             raise click.ClickException(
@@ -581,12 +586,18 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        cfg = jhelper.cli("config", CA_APP_NAME)
-        current = cfg.get("common-name", {}).get("value")
-        if current != common_domain:
-            try:
-                jhelper.cli("config", CA_APP_NAME, f"common-name={common_domain}")
-                console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
-            except Exception as e:
-                LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
-                raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
+        with jhelper._model(OPENSTACK_MODEL) as juju:
+            cfg = jhelper.cli("config", CA_APP_NAME,
+                              include_controller=False,
+                              juju=juju)
+            current = cfg.get("common-name", {}).get("value")
+            if current != common_domain:
+                try:
+                    jhelper.cli("config", CA_APP_NAME,
+                                f"common-name={common_domain}",
+                                include_controller=False,
+                                juju=juju)
+                    console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
+                except Exception as e:
+                    LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
+                    raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
