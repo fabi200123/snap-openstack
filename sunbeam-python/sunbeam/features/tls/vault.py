@@ -250,31 +250,6 @@ class VaultTlsFeature(TlsFeature):
         )
         return [content]
 
-    def enable_feature(
-        self,
-        deployment: Deployment,
-        config: VaultTlsFeatureConfig,
-        show_hints: bool,
-    ) -> None:
-        """
-        Override default so we only ever run Terraform ONCE.
-        If the 'manual-tls-certificates' app already exists, skip Terraform
-        and only run pre_enable (so we don't clobber any other charm config).
-        """
-        jhelper = JujuHelper(deployment.juju_controller)
-        try:
-            # check if the provider charm is already deployed
-            jhelper.get_application("manual-tls-certificates", OPENSTACK_MODEL)
-            console.print(
-                "[yellow]manual-tls-certificates already present; "
-                "skipping Terraform and only running pre_enable[/]"
-            )
-            # just set Vault's common_name (or whatever you do in pre_enable)
-            self.pre_enable(deployment, config, show_hints)
-        except ApplicationNotFoundException:
-            # first time: go through the normal full enable path (pre  terraform  post)
-            super().enable_feature(deployment, config, show_hints)
-
     @click.command()
     @click.option(
         "--endpoint",
@@ -316,6 +291,35 @@ class VaultTlsFeature(TlsFeature):
         )
         # self.pre_enable(deployment, config, show_hints)
         self.enable_feature(deployment, config, show_hints)
+
+    def enable_feature(
+        self,
+        deployment: Deployment,
+        config: VaultTlsFeatureConfig,
+        show_hints: bool,
+    ) -> None:
+        """
+        * First run *: normal full enable (pre_enable → Terraform → post_enable).
+        * Later runs *: skip Terraform entirely—only run pre_enable and post_enable.
+        """
+        jhelper = JujuHelper(deployment.juju_controller)
+        try:
+            # If manual-tls-certificates is already deployed, this will succeed.
+            jhelper.get_application("manual-tls-certificates", OPENSTACK_MODEL)
+        except ApplicationNotFoundException:
+            # Not yet deployed: do the full workflow (which will invoke Terraform)
+            return super().enable_feature(deployment, config, show_hints)
+
+        # Already deployed: skip Terraform
+        console.print(
+            "[yellow]manual-tls-certificates already present;"
+            " skipping Terraform and only re-running configuration[/]"
+        )
+        # 1) Update Vault’s common_name (juju config vault common_name=…)
+        self.pre_enable(deployment, config, show_hints)
+        # 2) Push CA cert into Keystone & store config in the sunbeam DB
+        self.post_enable(deployment, config, show_hints)
+        return
 
     def run_enable_plans(
         self, deployment: Deployment, config: VaultTlsFeatureConfig, show_hints: bool
