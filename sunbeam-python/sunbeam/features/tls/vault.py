@@ -116,7 +116,7 @@ class ConfigureVaultCAStep(BaseStep):
         # let exception propagate, since they are SunbeamException
         # they will be caught cleanly
         action_result = get_outstanding_certificate_requests(
-            self.app, self.model, self.jhelper
+            self.app, OPENSTACK_MODEL, self.jhelper
         )
 
         LOG.debug(f"Result from action {action_cmd}: {action_result}")
@@ -183,7 +183,7 @@ class ConfigureVaultCAStep(BaseStep):
         """Run configure steps."""
         action_cmd = "provide-certificate"
         try:
-            unit = self.jhelper.get_leader_unit(self.app, self.model)
+            unit = self.jhelper.get_leader_unit(self.app, OPENSTACK_MODEL)
         except LeaderNotFoundException as e:
             LOG.debug(f"Unable to get {self.app} leader")
             return Result(ResultType.FAILED, str(e))
@@ -205,7 +205,7 @@ class ConfigureVaultCAStep(BaseStep):
             LOG.debug(f"Running action {action_cmd}")
             try:
                 action_result = self.jhelper.run_action(
-                    unit, self.model, action_cmd, action_params)
+                    unit, OPENSTACK_MODEL, action_cmd, action_params)
             except ActionFailedException as e:
                 LOG.debug(f"Running action {action_cmd} on {unit}")
                 return Result(ResultType.FAILED, str(e))
@@ -471,7 +471,7 @@ class VaultTlsFeature(TlsFeature):
             )
 
         vhelper = VaultHelper(jhelper)
-        app_status = jhelper.get_application(CA_APP_NAME, self.model)
+        app_status = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
         units = list(app_status.units.items())
         if not units:
             raise click.ClickException(
