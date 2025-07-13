@@ -587,11 +587,12 @@ class VaultTlsFeature(TlsFeature):
         common_domain = domains.pop()
 
         # Set Vault’s common-name
-        jhelper.cli(
-            "config",
-            CA_APP_NAME,
-            f"common_name={common_domain}",
-            include_controller=False,
-            json_format=False,
-        )
+        with jhelper._model(OPENSTACK_MODEL):
+            jhelper.cli(
+                "config",
+                CA_APP_NAME,
+                f"common_name={common_domain}",
+                include_controller=False,
+                json_format=False,
+            )
         console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
