@@ -590,7 +590,7 @@ class VaultTlsFeature(TlsFeature):
         jhelper.cli(
             "config",
             CA_APP_NAME,
-            f"common-name={common_domain}",
+            f"common_name={common_domain}",
             include_controller=False,
         )
-        console.print(f"Set {CA_APP_NAME}.common-name = {common_domain}")
+        console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
