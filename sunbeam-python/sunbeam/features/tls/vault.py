@@ -31,6 +31,7 @@ from sunbeam.core.common import (
 from sunbeam.core.deployment import Deployment
 from sunbeam.core.juju import (
     ActionFailedException,
+    ApplicationNotFoundException,
     JujuException,
     JujuHelper,
     LeaderNotFoundException,
@@ -290,6 +291,21 @@ class VaultTlsFeature(TlsFeature):
         )
         # self.pre_enable(deployment, config, show_hints)
         self.enable_feature(deployment, config, show_hints)
+
+    def run_enable_plans(
+        self, deployment: Deployment, config: VaultTlsFeatureConfig, show_hints: bool
+    ) -> None:
+        """Only run Terraform the first time; skip it on subsequent enables."""
+        jhelper = JujuHelper(deployment.juju_controller)
+        try:
+            # If manual-tls-certificates is already in the model, don't reapply Terraform.
+            jhelper.get_application(self.app_name, OPENSTACK_MODEL)
+            console.print(
+                "[yellow]manual-tls-certificates already deployed; skipping Terraform changes[/]"
+            )
+        except ApplicationNotFoundException:
+            # First time through—deploy via Terraform as normal.
+            super().run_enable_plans(deployment, config, show_hints)
 
     @click.command()
     @click_option_show_hints
