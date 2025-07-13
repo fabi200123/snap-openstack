@@ -640,28 +640,42 @@ class TestConfigureVaultCAStepRun:
 
 
 class TestVaultTlsFeatureGetRelations:
-    @patch("sunbeam.features.tls.vault.run_sync")
-    def test_get_relations_filters_and_splits(self, mock_run_sync):
-        mock_run_sync.return_value = {
-            "relations": [
-                {"key": "public something"},
-                {"key": "internal another"},
-                {"key": "rgw extra"},
-                {"key": "unrelated key"},
-            ]
+    def test_get_relations_filters_and_splits(self):
+        app_public = Mock()
+        app_public.relations = {"something": "public.example.com"}
+        app_rgw = Mock()
+        app_rgw.relations = {"extra": "rgw.example.com"}
+        model_status = Mock()
+        model_status.apps = {
+            "public": app_public,
+            "internal": Mock(relations={"another": "internal.example.com"}),
+            "rgw": app_rgw,
         }
+
+        jhelper = Mock()
+        jhelper.get_model_status.return_value = model_status
         feature = vault.VaultTlsFeature()
-        feature.jhelper = Mock()
+        feature.jhelper = jhelper
+
         relations = feature._get_relations(
-            model="openstack", endpoints=["public", "rgw"]
+            model="openstack",
+            endpoints=["public:something", "rgw:extra"],
         )
-        assert relations == [("public", "something"), ("rgw", "extra")]
+
+        assert relations == [
+            ("public", "public.example.com"),
+            ("rgw", "rgw.example.com"),
+        ]
 
 
 class FakeUnit:
     def __init__(self, status, message):
-        self.workload_status = status
-        self.workload_status_message = message
+        class WorkloadStatus:
+            def __init__(self, current, message):
+                self.current = current
+                self.message = message
+
+        self.workload_status = WorkloadStatus(status, message)
 
 
 class FakeApp:
@@ -670,61 +684,53 @@ class FakeApp:
 
 
 class TestVaultTlsFeatureIsActive:
-    @patch("sunbeam.features.tls.vault.run_sync")
-    def test_active_status_short_circuits(self, mock_run_sync):
-        model = Mock()
-        leader = Mock()
+    def test_active_status_short_circuits(self):
+        jhelper = Mock()
+        jhelper.get_model_status.return_value = Mock()
+        jhelper.get_leader_unit.return_value = "vault/0"
+
         unit = FakeUnit(status="active", message="all good")
         app = FakeApp(units=[unit])
-        mock_run_sync.side_effect = [model, leader, app, None]
+        jhelper.get_application.return_value = app
 
         feature = vault.VaultTlsFeature()
-        jhelper = Mock()
         assert feature.is_vault_application_active(jhelper) is True
 
-    @patch("sunbeam.features.tls.vault.run_sync")
-    def test_no_units_raises(self, mock_run_sync):
-        model = Mock()
-        leader = Mock()
-        app = FakeApp(units=[])
-        mock_run_sync.side_effect = [model, leader, app, None]
+    def test_no_units_raises(self):
+        jhelper = Mock()
+        jhelper.get_model_status.return_value = Mock()
+        jhelper.get_leader_unit.return_value = "vault/0"
+        jhelper.get_application.return_value = FakeApp(units=[])
 
         feature = vault.VaultTlsFeature()
-        jhelper = Mock()
         with pytest.raises(click.ClickException) as exc:
             feature.is_vault_application_active(jhelper)
         assert "has no units" in str(exc.value)
 
     @patch("sunbeam.features.tls.vault.VaultHelper.get_vault_status")
-    @patch("sunbeam.features.tls.vault.run_sync")
-    def test_uninitialized_vault_raises(self, mock_run_sync, mock_status):
-        # Simulate blocked status path
-        model = Mock()
-        leader = Mock()
-        fake_unit = FakeUnit(status="blocked", message="message irrelevant")
-        app = FakeApp(units=[fake_unit])
-        mock_run_sync.side_effect = [model, leader, app, None]
-        # Vault status not initialized
+    def test_uninitialized_vault_raises(self, mock_status):
+        jhelper = Mock()
+        jhelper.get_model_status.return_value = Mock()
+        jhelper.get_leader_unit.return_value = "vault/0"
+        fake_unit = FakeUnit(status="blocked", message="blocked…")
+        jhelper.get_application.return_value = FakeApp(units=[fake_unit])
         mock_status.return_value = {"initialized": False, "sealed": False}
 
         feature = vault.VaultTlsFeature()
-        jhelper = Mock()
         with pytest.raises(click.ClickException) as exc:
             feature.is_vault_application_active(jhelper)
         assert "uninitialized" in str(exc.value)
 
     @patch("sunbeam.features.tls.vault.VaultHelper.get_vault_status")
-    @patch("sunbeam.features.tls.vault.run_sync")
-    def test_sealed_vault_raises(self, mock_run_sync, mock_status):
-        model = Mock()
-        leader = Mock()
-        fake_unit = FakeUnit(status="blocked", message="message irrelevant")
-        app = FakeApp(units=[fake_unit])
-        mock_run_sync.side_effect = [model, leader, app, None]
+    def test_sealed_vault_raises(self, mock_status):
+        jhelper = Mock()
+        jhelper.get_model_status.return_value = Mock()
+        jhelper.get_leader_unit.return_value = "vault/0"
+        fake_unit = FakeUnit(status="blocked", message="blocked…")
+        jhelper.get_application.return_value = FakeApp(units=[fake_unit])
         mock_status.return_value = {"initialized": True, "sealed": True}
 
         feature = vault.VaultTlsFeature()
-        jhelper = Mock()
         with pytest.raises(click.ClickException) as exc:
             feature.is_vault_application_active(jhelper)
         assert "sealed" in str(exc.value)

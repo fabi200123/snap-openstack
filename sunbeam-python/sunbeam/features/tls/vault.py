@@ -34,8 +34,6 @@ from sunbeam.core.juju import (
     JujuException,
     JujuHelper,
     LeaderNotFoundException,
-    TimeoutException,
-    run_sync,
 )
 from sunbeam.core.manifest import AddManifestStep, FeatureConfig
 from sunbeam.core.openstack import OPENSTACK_MODEL
@@ -118,7 +116,7 @@ class ConfigureVaultCAStep(BaseStep):
         # let exception propagate, since they are SunbeamException
         # they will be caught cleanly
         action_result = get_outstanding_certificate_requests(
-            self.app, self.model, self.jhelper
+            self.app, OPENSTACK_MODEL, self.jhelper
         )
 
         LOG.debug(f"Result from action {action_cmd}: {action_result}")
@@ -185,7 +183,7 @@ class ConfigureVaultCAStep(BaseStep):
         """Run configure steps."""
         action_cmd = "provide-certificate"
         try:
-            unit = run_sync(self.jhelper.get_leader_unit(self.app, self.model))
+            unit = self.jhelper.get_leader_unit(self.app, OPENSTACK_MODEL)
         except LeaderNotFoundException as e:
             LOG.debug(f"Unable to get {self.app} leader")
             return Result(ResultType.FAILED, str(e))
@@ -206,8 +204,8 @@ class ConfigureVaultCAStep(BaseStep):
 
             LOG.debug(f"Running action {action_cmd}")
             try:
-                action_result = run_sync(
-                    self.jhelper.run_action(unit, self.model, action_cmd, action_params)
+                action_result = self.jhelper.run_action(
+                    unit, OPENSTACK_MODEL, action_cmd, action_params
                 )
             except ActionFailedException as e:
                 LOG.debug(f"Running action {action_cmd} on {unit}")
@@ -252,6 +250,57 @@ class VaultTlsFeature(TlsFeature):
         )
         return [content]
 
+    def _build_tls_config_maps(
+        self,
+        jhelper: JujuHelper,
+        endpoints: list[str],
+    ) -> dict[str, dict[str, str]]:
+        """Get the TLS config maps for the specified endpoints."""
+        app_map = {
+            "public": "traefik-public",
+            "internal": "traefik",
+            "rgw": "traefik-rgw",
+        }
+
+        external: dict[str, str] = {}
+        for ep in endpoints:
+            app = app_map.get(ep)
+            try:
+                stat = jhelper.get_application(app, OPENSTACK_MODEL)
+                leader = jhelper.get_leader_unit(app, OPENSTACK_MODEL)
+                msg = stat.units[leader].workload_status.message or ""
+                if "Serving at " in msg:
+                    external[ep] = msg.split("Serving at ", 1)[1].strip()
+            except Exception:
+                LOG.warning(
+                    f"Failed to get status message for {app} application; "
+                    f"skipping external hostname for {ep} endpoint"
+                )
+                continue
+
+        if not external or (len(set(external.values())) == 1 and len(endpoints) > 1):
+            for ep in endpoints:
+                default = external.get(ep, "")
+                external[ep] = click.prompt(
+                    f"  Enter external hostname for {ep}",
+                    default=default or None,
+                    show_default=bool(default),
+                )
+
+        maps: dict[str, dict[str, str]] = {}
+        domains = {h.split(".", 1)[1] for h in external.values() if "." in h}
+        if domains:
+            maps["vault-config"] = {"common_name": domains.pop()}
+
+        if "public" in external:
+            maps["traefik-public-config"] = {"external_hostname": external["public"]}
+        if "internal" in external:
+            maps["traefik-config"] = {"external_hostname": external["internal"]}
+        if "rgw" in external:
+            maps["traefik-rgw-config"] = {"external_hostname": external["rgw"]}
+
+        return maps
+
     @click.command()
     @click.option(
         "--endpoint",
@@ -291,7 +340,6 @@ class VaultTlsFeature(TlsFeature):
             ca_chain=ca_chain,
             endpoints=endpoints,
         )
-        self.pre_enable(deployment, config, show_hints)
         self.enable_feature(deployment, config, show_hints)
 
     @click.command()
@@ -314,28 +362,18 @@ class VaultTlsFeature(TlsFeature):
             "traefik-to-tls-provider": CA_APP_NAME,
             "manual-tls-certificates-channel": "1/stable",
         }
-        if "public" in config.endpoints:
-            tfvars.update({"enable-tls-for-public-endpoint": True})
-        if "internal" in config.endpoints:
-            tfvars.update({"enable-tls-for-internal-endpoint": True})
-        if "rgw" in config.endpoints:
-            tfvars.update({"enable-tls-for-rgw-endpoint": True})
-
+        jhelper = JujuHelper(deployment.juju_controller)
+        tfvars.update(self._build_tls_config_maps(jhelper, config.endpoints))
+        tfvars["enable-tls-for-public-endpoint"] = "public" in config.endpoints
+        tfvars["enable-tls-for-internal-endpoint"] = "internal" in config.endpoints
+        tfvars["enable-tls-for-rgw-endpoint"] = "rgw" in config.endpoints
         return tfvars
 
     def set_tfvars_on_disable(self, deployment: Deployment) -> dict:
         """Set terraform variables to disable the application."""
-        tfvars: dict[str, None | str | bool] = {"traefik-to-tls-provider": None}
-        provider_config = self.provider_config(deployment)
-        endpoints = provider_config.get("endpoints", [])
-        if "public" in endpoints:
-            tfvars.update({"enable-tls-for-public-endpoint": False})
-        if "internal" in endpoints:
-            tfvars.update({"enable-tls-for-internal-endpoint": False})
-        if "rgw" in endpoints:
-            tfvars.update({"enable-tls-for-rgw-endpoint": False})
-
-        return tfvars
+        return {
+            "traefik-to-tls-provider": None,
+        }
 
     def set_tfvars_on_resize(
         self, deployment: Deployment, config: FeatureConfig
@@ -356,7 +394,7 @@ class VaultTlsFeature(TlsFeature):
         app = "manual-tls-certificates"
         model = OPENSTACK_MODEL
         action_cmd = "get-outstanding-certificate-requests"
-        jhelper = JujuHelper(deployment.get_connected_controller())
+        jhelper = JujuHelper(deployment.juju_controller)
         try:
             action_result = get_outstanding_certificate_requests(app, model, jhelper)
         except LeaderNotFoundException as e:
@@ -426,7 +464,7 @@ class VaultTlsFeature(TlsFeature):
         if ca is None or ca_chain is None:
             raise click.ClickException("CA and CA Chain not configured")
 
-        jhelper = JujuHelper(deployment.get_connected_controller())
+        jhelper = JujuHelper(deployment.juju_controller)
         plan = [
             AddManifestStep(client, manifest_path),
             ConfigureVaultCAStep(
@@ -465,9 +503,8 @@ class VaultTlsFeature(TlsFeature):
 
     def is_vault_application_active(self, jhelper: JujuHelper) -> bool:
         """Check if Vault is deployed, initialized, and authorized."""
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
         try:
-            leader = run_sync(jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL))
+            leader = jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
         except SunbeamException:
             raise click.ClickException(
                 "Cannot enable TLS Vault because Vault is not deployed. "
@@ -475,14 +512,20 @@ class VaultTlsFeature(TlsFeature):
             )
 
         vhelper = VaultHelper(jhelper)
-        app = run_sync(jhelper.get_application(CA_APP_NAME, model))
-        unit = app.units[0] if app.units else None
-        if not unit:
+        app_status = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
+        raw_units = app_status.units
+        if hasattr(raw_units, "items"):
+            unit_items = raw_units.items()
+        else:
+            unit_items = enumerate(raw_units)
+        units = list(unit_items)
+        if not units:
             raise click.ClickException(
                 "Vault application has no units. Please deploy Vault first."
             )
-        status = unit.workload_status
-        message = unit.workload_status_message
+        _, unit_stat = units[0]
+        status = unit_stat.workload_status.current
+        message = unit_stat.workload_status.message
 
         if status == "active":
             return True
@@ -491,10 +534,8 @@ class VaultTlsFeature(TlsFeature):
             vault_status = vhelper.get_vault_status(leader)
         except VaultCommandFailedException as e:
             raise click.ClickException(f"Error querying Vault status: {e}")
-        except (TimeoutException, JujuException) as e:
+        except (TimeoutError, JujuException) as e:
             raise click.ClickException(f"Unable to contact Vault: {e}")
-        finally:
-            run_sync(model.disconnect())
 
         if not vault_status.get("initialized", False):
             raise click.ClickException(
@@ -524,13 +565,15 @@ class VaultTlsFeature(TlsFeature):
     def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
         """Return model relations for the provided endpoints."""
         relations = []
-        model_status = run_sync(self.jhelper.get_model_status(model))
-        model_relations = [r.get("key") for r in model_status.get("relations", {})]
+        model_status = self.jhelper.get_model_status(model)
         for endpoint in endpoints:
-            for relation in model_relations:
-                if endpoint in relation:
-                    relations.append(tuple(relation.split(" ")))
-                    break
+            app, relation = endpoint.split(":")
+            if app not in model_status.apps:
+                continue
+            app_status = model_status.apps[app]
+            if relation in app_status.relations:
+                relations.append((app, app_status.relations[relation]))
+                continue
 
         return relations
 
@@ -543,13 +586,12 @@ class VaultTlsFeature(TlsFeature):
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
 
-        jhelper = JujuHelper(deployment.get_connected_controller())
+        jhelper = JujuHelper(deployment.juju_controller)
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
                 "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
             )
 
-        model = run_sync(jhelper.get_model(OPENSTACK_MODEL))
         app_map = {
             "public": "traefik-public",
             "internal": "traefik",
@@ -564,34 +606,38 @@ class VaultTlsFeature(TlsFeature):
                 LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            app = run_sync(jhelper.get_application(app_name, model))
-            cfg = run_sync(app.get_config())
-            hostname = cfg.get("external_hostname", {}).get("value")
-            if not hostname:
-                missing.append(endpoint)
-            else:
+            app_stat = jhelper.get_application(app_name, OPENSTACK_MODEL)
+            leader = jhelper.get_leader_unit(app_name, OPENSTACK_MODEL)
+            msg = app_stat.units[leader].workload_status.message or ""
+
+            if "Serving at " in msg:
+                hostname = msg.split("Serving at ", 1)[1].strip()
                 external_map[endpoint] = hostname
+            else:
+                missing.append(endpoint)
 
         if missing:
             raise click.ClickException(
-                "TLS Vault requires every endpoint to have an external_hostname;\n"
-                f"the following endpoint(s) were missing one: {', '.join(missing)}"
+                "TLS Vault cannot be enabled because the following endpoints "
+                f"are not configured with external hostnames: {', '.join(missing)}"
             )
 
+        # All hostnames must share one domain
         domains = {h.split(".", 1)[1] for h in external_map.values() if "." in h}
         if len(domains) != 1:
             raise click.ClickException(
-                "Traefik charms must share one domain; found: "
+                "Traefik endpoints must share one domain; found: "
                 f"{', '.join(external_map.values())}"
             )
         common_domain = domains.pop()
 
-        vault_app = run_sync(jhelper.get_application(CA_APP_NAME, model))
-        current = run_sync(vault_app.get_config()).get("common_name", {}).get("value")
-        if current != common_domain:
-            try:
-                run_sync(vault_app.set_config({"common_name": common_domain}))
-                console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
-            except Exception as e:
-                LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
-                raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
+        # Set Vault’s common-name
+        with jhelper._model(OPENSTACK_MODEL):
+            jhelper.cli(
+                "config",
+                CA_APP_NAME,
+                f"common_name={common_domain}",
+                include_controller=False,
+                json_format=False,
+            )
+        console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
