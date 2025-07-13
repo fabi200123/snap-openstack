@@ -471,14 +471,15 @@ class VaultTlsFeature(TlsFeature):
             )
 
         vhelper = VaultHelper(jhelper)
-        app = jhelper.get_application(CA_APP_NAME, self.model)
-        unit = app.units[0] if app.units else None
-        if not unit:
+        app_status = jhelper.get_application(CA_APP_NAME, self.model)
+        units = list(app_status.units.items())
+        if not units:
             raise click.ClickException(
                 "Vault application has no units. Please deploy Vault first."
             )
-        status = unit.workload_status
-        message = unit.workload_status_message
+        _, unit_stat = units[0]
+        status = unit_stat.workload_status.current
+        message = unit_stat.workload_status.message
 
         if status == "active":
             return True
@@ -559,9 +560,8 @@ class VaultTlsFeature(TlsFeature):
                 LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
                 continue
 
-            app = jhelper.get_application(app_name, self.model)
-            cfg = app.get_config()
-            hostname = cfg.get("external_hostname", {}).get("value")
+            cfg = jhelper.cli("config", app_name)
+            hostname = cfg.get("external-hostname", {}).get("value")
             if not hostname:
                 missing.append(endpoint)
             else:
@@ -581,11 +581,11 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        vault_app = jhelper.get_application(CA_APP_NAME, self.model)
-        current = vault_app.get_config().get("common_name", {}).get("value")
+        cfg = jhelper.cli("config", CA_APP_NAME)
+        current = cfg.get("common-name", {}).get("value")
         if current != common_domain:
             try:
-                vault_app.set_config({"common_name": common_domain})
+                jhelper.cli("config", CA_APP_NAME, f"common-name={common_domain}")
                 console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
             except Exception as e:
                 LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
