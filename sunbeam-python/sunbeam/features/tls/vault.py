@@ -250,6 +250,31 @@ class VaultTlsFeature(TlsFeature):
         )
         return [content]
 
+    def enable_feature(
+        self,
+        deployment: Deployment,
+        config: VaultTlsFeatureConfig,
+        show_hints: bool,
+    ) -> None:
+        """
+        Override default so we only ever run Terraform ONCE.
+        If the 'manual-tls-certificates' app already exists, skip Terraform
+        and only run pre_enable (so we don't clobber any other charm config).
+        """
+        jhelper = JujuHelper(deployment.juju_controller)
+        try:
+            # check if the provider charm is already deployed
+            jhelper.get_application("manual-tls-certificates", OPENSTACK_MODEL)
+            console.print(
+                "[yellow]manual-tls-certificates already present; "
+                "skipping Terraform and only running pre_enable[/]"
+            )
+            # just set Vault's common_name (or whatever you do in pre_enable)
+            self.pre_enable(deployment, config, show_hints)
+        except ApplicationNotFoundException:
+            # first time: go through the normal full enable path (pre  terraform  post)
+            super().enable_feature(deployment, config, show_hints)
+
     @click.command()
     @click.option(
         "--endpoint",
