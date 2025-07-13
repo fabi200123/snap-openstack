@@ -288,7 +288,7 @@ class VaultTlsFeature(TlsFeature):
             ca_chain=ca_chain,
             endpoints=endpoints,
         )
-        self.pre_enable(deployment, config, show_hints)
+        # self.pre_enable(deployment, config, show_hints)
         self.enable_feature(deployment, config, show_hints)
 
     @click.command()
