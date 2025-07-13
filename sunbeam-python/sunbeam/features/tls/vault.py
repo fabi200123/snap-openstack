@@ -537,7 +537,6 @@ class VaultTlsFeature(TlsFeature):
         config: VaultTlsFeatureConfig,
         show_hints: bool,
     ) -> None:
-        """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
 
         jhelper = JujuHelper(deployment.juju_controller)
@@ -554,30 +553,31 @@ class VaultTlsFeature(TlsFeature):
         external_map: dict[str, str] = {}
         missing: list[str] = []
 
-        with jhelper._model(OPENSTACK_MODEL) as juju:
-            for endpoint in config.endpoints:
-                app_name = app_map.get(endpoint)
-                if not app_name:
-                    LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
-                    continue
+        for endpoint in config.endpoints:
+            app_name = app_map.get(endpoint)
+            if not app_name:
+                LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
+                continue
 
-                # run `juju config <app>` in the OPENSTACK_MODEL,
-                # with no extra --controller flag
-                cfg = jhelper.cli("config", app_name,
-                                  include_controller=False,
-                                  juju=juju)
-                hostname = cfg.get("external-hostname", {}).get("value")
-                if not hostname:
-                    missing.append(endpoint)
-                else:
-                    external_map[endpoint] = hostname
+            # Look at the leader’s status.message for “Serving at …”
+            app_stat = jhelper.get_application(app_name, OPENSTACK_MODEL)
+            leader = jhelper.get_leader_unit(app_name, OPENSTACK_MODEL)
+            msg = app_stat.units[leader].workload_status.message or ""
+
+            if "Serving at " in msg:
+                hostname = msg.split("Serving at ", 1)[1].strip()
+                external_map[endpoint] = hostname
+            else:
+                missing.append(endpoint)
 
         if missing:
             raise click.ClickException(
-                "TLS Vault requires every endpoint to have an external_hostname;\n"
-                f"the following endpoint(s) were missing one: {', '.join(missing)}"
+                "TLS Vault requires every endpoint to be serving on a hostname;\n"
+                f"the following endpoint(s) had no “Serving at …” in their status: "
+                f"{', '.join(missing)}"
             )
 
+        # All hostnames must share one domain
         domains = {h.split(".", 1)[1] for h in external_map.values() if "." in h}
         if len(domains) != 1:
             raise click.ClickException(
@@ -586,18 +586,11 @@ class VaultTlsFeature(TlsFeature):
             )
         common_domain = domains.pop()
 
-        with jhelper._model(OPENSTACK_MODEL) as juju:
-            cfg = jhelper.cli("config", CA_APP_NAME,
-                              include_controller=False,
-                              juju=juju)
-            current = cfg.get("common-name", {}).get("value")
-            if current != common_domain:
-                try:
-                    jhelper.cli("config", CA_APP_NAME,
-                                f"common-name={common_domain}",
-                                include_controller=False,
-                                juju=juju)
-                    console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
-                except Exception as e:
-                    LOG.error(f"Failed to set common_name on {CA_APP_NAME}: {e}")
-                    raise click.ClickException(f"Could not configure {CA_APP_NAME}: {e}")
+        # Set Vault’s common-name
+        jhelper.cli(
+            "config",
+            CA_APP_NAME,
+            f"common-name={common_domain}",
+            include_controller=False,
+        )
+        console.print(f"Set {CA_APP_NAME}.common-name = {common_domain}")
