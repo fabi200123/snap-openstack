@@ -278,6 +278,17 @@ class VaultTlsFeature(TlsFeature):
                 )
                 continue
 
+        missing = [ep for ep in endpoints if ep not in external]
+        if missing:
+            raise RuntimeError(
+                f"No external hostname found for endpoints: {', '.join(missing)}"
+            )
+        if len(set(external.values())) == 1 and len(endpoints) > 1:
+            raise RuntimeError(
+                "All endpoints resolved to the same hostname; they must have different "
+                "hostnames."
+            )
+
         maps: dict[str, dict[str, str]] = {}
         domains = {h.split(".", 1)[1] for h in external.values() if "." in h}
         if domains:
