@@ -144,6 +144,23 @@ def k8s_addons_questions():
     }
 
 
+def endpoint_questions():
+    return {
+        "traefik": PromptQuestion(
+            "Hostname for Traefik internal endpoint",
+            default_value=preseed.get("traefik", ""),
+        ),
+        "traefik-public": PromptQuestion(
+            "Hostname for Traefik public endpoint",
+            default_value=preseed.get("traefik-public", ""),
+        ),
+        "traefik-rgw": PromptQuestion(
+            "Hostname for Traefik RGW endpoint",
+            default_value=preseed.get("traefik-rgw", ""),
+        ),
+    }
+
+
 class KubeClientError(K8SError):
     pass
 
@@ -171,6 +188,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
     """Deploy K8S application using Terraform."""
 
     _ADDONS_CONFIG = K8S_ADDONS_CONFIG_KEY
+    _TRAEFIK_CONFIG_KEY = "TerraformVarsTraefikEndpoints"
 
     def __init__(
         self,
@@ -199,7 +217,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
         self.accept_defaults = accept_defaults
         self.variables: dict = {}
-        self.ranges: str | None = None
+        self.traefik_variables: dict = {}
 
     def prompt(
         self,
@@ -221,7 +239,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
         k8s_addons_bank = QuestionBank(
             questions=k8s_addons_questions(),
-            console=console,  # type: ignore
+            console=console,
             preseed=preseed,
             previous_answers=self.variables.get("k8s-addons", {}),
             accept_defaults=self.accept_defaults,
@@ -230,21 +248,32 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         self.variables["k8s-addons"]["loadbalancer"] = (
             k8s_addons_bank.loadbalancer.ask()
         )
-
-        LOG.debug(self.variables)
         write_answers(self.client, self._ADDONS_CONFIG, self.variables)
 
+        # Traefik endpoints prompt
+        self.traefik_variables = load_answers(self.client, self._TRAEFIK_CONFIG_KEY)
+        self.traefik_variables.setdefault("traefik-endpoints", {})
+
+        preseed = getattr(self.manifest.core.config, "traefik_endpoints", {}) or {}
+
+        endpoint_bank = QuestionBank(
+            questions=endpoint_questions(),
+            console=console,
+            previous_answers=self.traefik_variables["traefik-endpoints"],
+            accept_defaults=self.accept_defaults,
+            show_hint=show_hint,
+        )
+
+        for key in endpoint_questions():
+            answer = endpoint_bank.questions[key].ask()
+            if answer:
+                self.traefik_variables.setdefault("traefik-endpoints", {})[key] = answer
+
+        write_answers(self.client, self._TRAEFIK_CONFIG_KEY, self.traefik_variables)
+
     def has_prompts(self) -> bool:
-        """Returns true if the step has prompts that it can ask the user.
-
-        :return: True if the step can ask the user for prompts,
-                 False otherwise
-        """
-        # No need to prompt for questions in case of refresh
-        if self.refresh:
-            return False
-
-        return True
+        """Returns True if prompts are available."""
+        return not self.refresh
 
     def get_application_timeout(self) -> int:
         """Return application timeout."""
@@ -277,14 +306,50 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
         return config_tfvars
 
+    def _get_traefik_endpoint_tfvars(self) -> dict:
+        """Prepare Traefik endpoint terraform variables."""
+        traefik_vars = load_answers(self.client, self._TRAEFIK_CONFIG_KEY).get(
+            "traefik-endpoints", {}
+        )
+
+        return {
+            "traefik-config": {
+                # Use underscore in key to match charm config
+                "external_hostname": traefik_vars.get("traefik"),
+            },
+            "traefik-public-config": {
+                "external_hostname": traefik_vars.get("traefik-public"),
+            },
+            "traefik-rgw-config": {
+                "external_hostname": traefik_vars.get("traefik-rgw"),
+            },
+        }
+
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
-        return {
+        tfvars = {
             "endpoint_bindings": [
                 {"space": self.deployment.get_space(Networks.MANAGEMENT)},
             ],
             "k8s_config": self._get_k8s_config_tfvars(),
         }
+        traefik_vars = load_answers(self.client, self._TRAEFIK_CONFIG_KEY).get(
+            "traefik-endpoints", {}
+        )
+
+        tfvars.update(
+            {
+                "traefik-config": {"external_hostname": traefik_vars.get("traefik")},
+                "traefik-public-config": {
+                    "external_hostname": traefik_vars.get("traefik-public")
+                },
+                "traefik-rgw-config": {
+                    "external_hostname": traefik_vars.get("traefik-rgw")
+                },
+            }
+        )
+
+        return tfvars
 
 
 class AddK8SUnitsStep(AddMachineUnitsStep):

@@ -255,44 +255,51 @@ class VaultTlsFeature(TlsFeature):
         jhelper: JujuHelper,
         endpoints: list[str],
     ) -> dict[str, dict[str, str]]:
-        """Get the TLS config maps for the specified endpoints."""
-        app_map = {
+        """Get the TLS config maps for specified endpoints from Sunbeam database."""
+        external: dict[str, str] = {}
+        missing: list[str] = []
+
+        # Load Traefik endpoint hostnames from Sunbeam database
+        try:
+            traefik_vars = read_config(self.client, "TerraformVarsTraefikEndpoints")
+            traefik_endpoints = traefik_vars.get("traefik-endpoints", {})
+        except ConfigItemNotFoundException:
+            raise click.ClickException(
+                "Traefik endpoint hostnames are not configured in Sunbeam. "
+                "Please configure them before proceeding."
+            )
+
+        endpoint_key_map = {
             "public": "traefik-public",
             "internal": "traefik",
             "rgw": "traefik-rgw",
         }
 
-        external: dict[str, str] = {}
         for ep in endpoints:
-            app = app_map[ep]
-            try:
-                stat = jhelper.get_application(app, OPENSTACK_MODEL)
-                leader = jhelper.get_leader_unit(app, OPENSTACK_MODEL)
-                msg = stat.units[leader].workload_status.message or ""
-                if "Serving at " in msg:
-                    external[ep] = msg.split("Serving at ", 1)[1].strip()
-            except Exception:
-                LOG.warning(
-                    f"Failed to get status message for {app} application; "
-                    f"skipping external hostname for {ep} endpoint"
-                )
-                continue
+            endpoint_key = endpoint_key_map[ep]
+            hostname = traefik_endpoints.get(endpoint_key)
+            if hostname:
+                external[ep] = hostname
+            else:
+                missing.append(ep)
 
-        missing = [ep for ep in endpoints if ep not in external]
         if missing:
-            raise RuntimeError(
-                f"No external hostname found for endpoints: {', '.join(missing)}"
-            )
-        if len(set(external.values())) == 1 and len(endpoints) > 1:
-            raise RuntimeError(
-                "All endpoints resolved to the same hostname; they must have different "
-                "hostnames."
+            raise click.ClickException(
+                "TLS Vault cannot be enabled because the following endpoints "
+                f"are missing external hostnames: {', '.join(missing)}. "
+                "Please configure these hostnames using Sunbeam bootstrap."
             )
 
         maps: dict[str, dict[str, str]] = {}
         domains = {h.split(".", 1)[1] for h in external.values() if "." in h}
-        if domains:
-            maps["vault-config"] = {"common_name": domains.pop()}
+        if len(domains) != 1:
+            raise click.ClickException(
+                "Traefik endpoints must share one common domain; found multiple: "
+                f"{', '.join(domains)}"
+            )
+
+        common_domain = domains.pop()
+        maps["vault-config"] = {"common_name": common_domain}
 
         if "public" in external:
             maps["traefik-public-config"] = {"external_hostname": external["public"]}
@@ -337,6 +344,8 @@ class VaultTlsFeature(TlsFeature):
         show_hints: bool,
     ):
         """Enable TLS Vault feature."""
+        self.client = deployment.get_client()
+
         config = VaultTlsFeatureConfig(
             ca=ca,
             ca_chain=ca_chain,
@@ -573,53 +582,50 @@ class VaultTlsFeature(TlsFeature):
     ) -> None:
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
-
         jhelper = JujuHelper(deployment.juju_controller)
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
                 "Cannot enable TLS Vault as Vault is not enabled. Enable Vault first."
             )
 
-        app_map = {
+        try:
+            tfvars = read_config(self.client, "TerraformVarsTraefikEndpoints")
+            saved = tfvars.get("traefik-endpoints", {})
+        except ConfigItemNotFoundException:
+            raise click.ClickException(
+                "Traefik endpoint hostnames are not configured in Sunbeam. "
+                "Please configure them using the bootstrap prompts."
+            )
+
+        key_map = {
             "public": "traefik-public",
             "internal": "traefik",
             "rgw": "traefik-rgw",
         }
-        external_map: dict[str, str] = {}
+        external: dict[str, str] = {}
         missing: list[str] = []
-
-        for endpoint in config.endpoints:
-            app_name = app_map.get(endpoint)
-            if not app_name:
-                LOG.warning(f"Skipping unknown endpoint '{endpoint}'")
-                continue
-
-            app_stat = jhelper.get_application(app_name, OPENSTACK_MODEL)
-            leader = jhelper.get_leader_unit(app_name, OPENSTACK_MODEL)
-            msg = app_stat.units[leader].workload_status.message or ""
-
-            if "Serving at " in msg:
-                hostname = msg.split("Serving at ", 1)[1].strip()
-                external_map[endpoint] = hostname
+        for ep in config.endpoints:
+            k = key_map[ep]
+            h = saved.get(k, "").strip()
+            if h:
+                external[ep] = h
             else:
-                missing.append(endpoint)
+                missing.append(ep)
 
         if missing:
             raise click.ClickException(
-                "TLS Vault cannot be enabled because the following endpoints "
-                f"are not configured with external hostnames: {', '.join(missing)}"
+                "TLS Vault cannot be enabled because no hostname was provided for: "
+                f"{', '.join(missing)}"
             )
 
-        # All hostnames must share one domain
-        domains = {h.split(".", 1)[1] for h in external_map.values() if "." in h}
+        domains = {host.split(".", 1)[1] for host in external.values() if "." in host}
         if len(domains) != 1:
             raise click.ClickException(
-                "Traefik endpoints must share one domain; found: "
-                f"{', '.join(external_map.values())}"
+                f"Traefik endpoints must share one domain; \
+                found: {', '.join(external.values())}"
             )
         common_domain = domains.pop()
 
-        # Set Vault’s common-name
         with jhelper._model(OPENSTACK_MODEL):
             jhelper.cli(
                 "config",
