@@ -639,35 +639,6 @@ class TestConfigureVaultCAStepRun:
         assert "no leader" in result.message
 
 
-class TestVaultTlsFeatureGetRelations:
-    def test_get_relations_filters_and_splits(self):
-        app_public = Mock()
-        app_public.relations = {"something": "public.example.com"}
-        app_rgw = Mock()
-        app_rgw.relations = {"extra": "rgw.example.com"}
-        model_status = Mock()
-        model_status.apps = {
-            "public": app_public,
-            "internal": Mock(relations={"another": "internal.example.com"}),
-            "rgw": app_rgw,
-        }
-
-        jhelper = Mock()
-        jhelper.get_model_status.return_value = model_status
-        feature = vault.VaultTlsFeature()
-        feature.jhelper = jhelper
-
-        relations = feature._get_relations(
-            model="openstack",
-            endpoints=["public:something", "rgw:extra"],
-        )
-
-        assert relations == [
-            ("public", "public.example.com"),
-            ("rgw", "rgw.example.com"),
-        ]
-
-
 class FakeUnit:
     def __init__(self, status, message):
         class WorkloadStatus:
@@ -676,15 +647,23 @@ class FakeUnit:
                 self.message = message
 
         self.workload_status = WorkloadStatus(status, message)
+        self.workload_status_message = message
 
 
 class FakeApp:
     def __init__(self, units):
-        self.units = units
+        if isinstance(units, list):
+            self.units = dict(enumerate(units))
+        else:
+            self.units = units
 
 
 class TestVaultTlsFeatureIsActive:
-    def test_active_status_short_circuits(self):
+    @patch(
+        "sunbeam.features.tls.vault.VaultHelper.get_vault_status",
+        return_value={"initialized": True, "sealed": False},
+    )
+    def test_active_status_short_circuits(self, mock_status):
         jhelper = Mock()
         jhelper.get_model_status.return_value = Mock()
         jhelper.get_leader_unit.return_value = "vault/0"

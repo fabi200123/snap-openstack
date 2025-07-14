@@ -264,7 +264,7 @@ class VaultTlsFeature(TlsFeature):
 
         external: dict[str, str] = {}
         for ep in endpoints:
-            app = app_map.get(ep)
+            app = app_map[ep]
             try:
                 stat = jhelper.get_application(app, OPENSTACK_MODEL)
                 leader = jhelper.get_leader_unit(app, OPENSTACK_MODEL)
@@ -358,7 +358,7 @@ class VaultTlsFeature(TlsFeature):
         self, deployment: Deployment, config: VaultTlsFeatureConfig
     ) -> dict:
         """Set terraform variables to enable the application."""
-        tfvars: dict[str, str | bool] = {
+        tfvars: dict[str, typing.Any] = {
             "traefik-to-tls-provider": CA_APP_NAME,
             "manual-tls-certificates-channel": "1/stable",
         }
@@ -511,9 +511,8 @@ class VaultTlsFeature(TlsFeature):
                 "Please deploy Vault first."
             )
 
-        vhelper = VaultHelper(jhelper)
         app_status = jhelper.get_application(CA_APP_NAME, OPENSTACK_MODEL)
-        raw_units = app_status.units
+        raw_units: typing.Any = app_status.units
         if hasattr(raw_units, "items"):
             unit_items = raw_units.items()
         else:
@@ -524,12 +523,14 @@ class VaultTlsFeature(TlsFeature):
                 "Vault application has no units. Please deploy Vault first."
             )
         _, unit_stat = units[0]
+
         status = unit_stat.workload_status.current
         message = unit_stat.workload_status.message
 
         if status == "active":
             return True
 
+        vhelper = VaultHelper(jhelper)
         try:
             vault_status = vhelper.get_vault_status(leader)
         except VaultCommandFailedException as e:
@@ -542,45 +543,30 @@ class VaultTlsFeature(TlsFeature):
                 "Vault is deployed but uninitialized. "
                 "Please run `sunbeam vault init` first."
             )
-
         if vault_status.get("sealed", True):
             raise click.ClickException(
                 "Vault is initialized but still sealed. "
                 "Please unseal Vault before proceeding."
             )
 
+        # There is a case where after vault unseal, the vault
+        # application is still in blocked state, but shows the message
+        # "Please initialize Vault or integrate
+        # with an auto-unseal provider"
+        if "authorize" in message.lower() or "initialize" in message.lower():
+            raise click.ClickException(
+                "Vault is not authorized. Please run `sunbeam vault authorize-charm`"
+                "first."
+            )
+
         if status == "blocked":
-            # There is a case where after vault unseal, the vault
-            # application is still in blocked state, but shows the message
-            # "Please initialize Vault or integrate
-            # with an auto-unseal provider"
-            if "authorize" in message.lower() or "initialize" in message.lower():
-                raise click.ClickException(
-                    "Vault is not authorized. Please run "
-                    "`sunbeam vault authorize-charm` first."
-                )
             raise click.ClickException(f"Vault is blocked: {message}")
         return True
-
-    def _get_relations(self, model: str, endpoints: list[str]) -> list[tuple]:
-        """Return model relations for the provided endpoints."""
-        relations = []
-        model_status = self.jhelper.get_model_status(model)
-        for endpoint in endpoints:
-            app, relation = endpoint.split(":")
-            if app not in model_status.apps:
-                continue
-            app_status = model_status.apps[app]
-            if relation in app_status.relations:
-                relations.append((app, app_status.relations[relation]))
-                continue
-
-        return relations
 
     def pre_enable(
         self,
         deployment: Deployment,
-        config: VaultTlsFeatureConfig,
+        config: TlsFeatureConfig,
         show_hints: bool,
     ) -> None:
         """Handler to perform tasks before enabling the feature."""
