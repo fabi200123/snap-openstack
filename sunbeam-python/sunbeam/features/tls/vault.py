@@ -278,15 +278,6 @@ class VaultTlsFeature(TlsFeature):
                 )
                 continue
 
-        if not external or (len(set(external.values())) == 1 and len(endpoints) > 1):
-            for ep in endpoints:
-                default = external.get(ep, "")
-                external[ep] = click.prompt(
-                    f"  Enter external hostname for {ep}",
-                    default=default or None,
-                    show_default=bool(default),
-                )
-
         maps: dict[str, dict[str, str]] = {}
         domains = {h.split(".", 1)[1] for h in external.values() if "." in h}
         if domains:
