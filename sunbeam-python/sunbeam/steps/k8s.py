@@ -148,15 +148,15 @@ def endpoint_questions():
     return {
         "traefik": PromptQuestion(
             "Hostname for Traefik internal endpoint",
-            default_value=preseed.get("traefik", ""),
+            default_value="",
         ),
         "traefik-public": PromptQuestion(
             "Hostname for Traefik public endpoint",
-            default_value=preseed.get("traefik-public", ""),
+            default_value="",
         ),
         "traefik-rgw": PromptQuestion(
             "Hostname for Traefik RGW endpoint",
-            default_value=preseed.get("traefik-rgw", ""),
+            default_value="",
         ),
     }
 
@@ -259,6 +259,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         endpoint_bank = QuestionBank(
             questions=endpoint_questions(),
             console=console,
+            preseed=preseed,
             previous_answers=self.traefik_variables["traefik-endpoints"],
             accept_defaults=self.accept_defaults,
             show_hint=show_hint,

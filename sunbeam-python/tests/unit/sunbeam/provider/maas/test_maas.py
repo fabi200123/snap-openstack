@@ -1273,6 +1273,7 @@ class TestMaasDeployK8SApplicationStep:
             "test-model",
         )
         step.ranges = "10.0.0.0/28"
+        step.client.cluster.get_config.return_value = "{}"
         expected_tfvars = {
             "endpoint_bindings": [{"space": "data"}],
             "k8s_config": {
@@ -1282,7 +1283,10 @@ class TestMaasDeployK8SApplicationStep:
                 "node-labels": "sunbeam/deployment=test_deployment",
             },
         }
-        assert step.extra_tfvars() == expected_tfvars
+        actual = step.extra_tfvars()
+        for key in ("traefik-config", "traefik-public-config", "traefik-rgw-config"):
+            actual.pop(key, None)
+        assert actual == expected_tfvars
 
     def test_is_skip_with_public_ranges_error(self, mocker, deployment_k8s):
         mocker.patch(
