@@ -1282,11 +1282,18 @@ class TestMaasDeployK8SApplicationStep:
                 "load-balancer-l2-mode": True,
                 "node-labels": "sunbeam/deployment=test_deployment",
             },
+            "traefik-config": {
+                "external_hostname": None,
+            },
+            "traefik-public-config": {
+                "external_hostname": None,
+            },
+            "traefik-rgw-config": {
+                "external_hostname": None,
+            },
         }
-        actual = step.extra_tfvars()
-        for key in ("traefik-config", "traefik-public-config", "traefik-rgw-config"):
-            actual.pop(key, None)
-        assert actual == expected_tfvars
+
+        assert step.extra_tfvars() == expected_tfvars
 
     def test_is_skip_with_public_ranges_error(self, mocker, deployment_k8s):
         mocker.patch(

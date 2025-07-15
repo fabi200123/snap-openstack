@@ -93,6 +93,7 @@ else:
 LOG = logging.getLogger(__name__)
 K8S_CONFIG_KEY = "TerraformVarsK8S"
 K8S_ADDONS_CONFIG_KEY = "TerraformVarsK8SAddons"
+TRAEFIK_CONFIG_KEY = "TerraformVarsTraefikEndpoints"
 APPLICATION = "k8s"
 K8S_APP_TIMEOUT = 180  # 3 minutes, managing the application should be fast
 K8S_DESTROY_TIMEOUT = 900
@@ -188,7 +189,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
     """Deploy K8S application using Terraform."""
 
     _ADDONS_CONFIG = K8S_ADDONS_CONFIG_KEY
-    _TRAEFIK_CONFIG_KEY = "TerraformVarsTraefikEndpoints"
+    _TRAEFIK_CONFIG_KEY = TRAEFIK_CONFIG_KEY
 
     def __init__(
         self,
@@ -239,7 +240,7 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
         k8s_addons_bank = QuestionBank(
             questions=k8s_addons_questions(),
-            console=console,
+            console=console,  # type: ignore
             preseed=preseed,
             previous_answers=self.variables.get("k8s-addons", {}),
             accept_defaults=self.accept_defaults,
@@ -273,7 +274,11 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         write_answers(self.client, self._TRAEFIK_CONFIG_KEY, self.traefik_variables)
 
     def has_prompts(self) -> bool:
-        """Returns True if prompts are available."""
+        """Returns true if the step has prompts that it can ask the user.
+
+        :return: True if the step can ask the user for prompts,
+                 False otherwise
+        """
         return not self.refresh
 
     def get_application_timeout(self) -> int:

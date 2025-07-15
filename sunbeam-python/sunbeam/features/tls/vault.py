@@ -56,6 +56,7 @@ from sunbeam.features.tls.common import (
     get_outstanding_certificate_requests,
 )
 from sunbeam.features.vault.feature import VaultCommandFailedException, VaultHelper
+from sunbeam.steps.k8s import TRAEFIK_CONFIG_KEY
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
 CERTIFICATE_FEATURE_KEY = "TlsProvider"
@@ -255,13 +256,12 @@ class VaultTlsFeature(TlsFeature):
         jhelper: JujuHelper,
         endpoints: list[str],
     ) -> dict[str, dict[str, str]]:
-        """Get the TLS config maps for specified endpoints from Sunbeam database."""
+        """Get the TLS config maps for specified endpoints."""
         external: dict[str, str] = {}
         missing: list[str] = []
 
-        # Load Traefik endpoint hostnames from Sunbeam database
         try:
-            traefik_vars = read_config(self.client, "TerraformVarsTraefikEndpoints")
+            traefik_vars = read_config(self.client, TRAEFIK_CONFIG_KEY)
             traefik_endpoints = traefik_vars.get("traefik-endpoints", {})
         except ConfigItemNotFoundException:
             raise click.ClickException(
@@ -291,7 +291,10 @@ class VaultTlsFeature(TlsFeature):
             )
 
         maps: dict[str, dict[str, str]] = {}
-        domains = {h.split(".", 1)[1] for h in external.values() if "." in h}
+        domains = set()
+        for hostname in external.values():
+            if "." in hostname:
+                domains.add(hostname.split(".", 1)[1])
         if len(domains) != 1:
             raise click.ClickException(
                 "Traefik endpoints must share one common domain; found multiple: "
@@ -582,6 +585,7 @@ class VaultTlsFeature(TlsFeature):
     ) -> None:
         """Handler to perform tasks before enabling the feature."""
         super().pre_enable(deployment, config, show_hints)
+
         jhelper = JujuHelper(deployment.juju_controller)
         if not self.is_vault_application_active(jhelper):
             raise click.ClickException(
@@ -589,7 +593,7 @@ class VaultTlsFeature(TlsFeature):
             )
 
         try:
-            tfvars = read_config(self.client, "TerraformVarsTraefikEndpoints")
+            tfvars = read_config(self.client, TRAEFIK_CONFIG_KEY)
             saved = tfvars.get("traefik-endpoints", {})
         except ConfigItemNotFoundException:
             raise click.ClickException(
@@ -618,7 +622,10 @@ class VaultTlsFeature(TlsFeature):
                 f"{', '.join(missing)}"
             )
 
-        domains = {host.split(".", 1)[1] for host in external.values() if "." in host}
+        domains = set()
+        for hostname in external.values():
+            if "." in hostname:
+                domains.add(hostname.split(".", 1)[1])
         if len(domains) != 1:
             raise click.ClickException(
                 f"Traefik endpoints must share one domain; \
