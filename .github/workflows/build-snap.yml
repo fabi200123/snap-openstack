@@ -91,9 +91,11 @@ jobs:
           sg snap_daemon "openstack.sunbeam enable orchestration"
           sg snap_daemon "openstack.sunbeam enable loadbalancer"
           sg snap_daemon "openstack.sunbeam enable dns testing.github."
-          sg snap_daemon "openstack.sunbeam disable dns"
-          sg snap_daemon "openstack.sunbeam disable loadbalancer"
-          sg snap_daemon "openstack.sunbeam disable orchestration"
+          # Disabled until https://github.com/canonical/mysql-router-k8s-operator/issues/452
+          # or corresponding juju bug is fixed
+          # sg snap_daemon "openstack.sunbeam disable dns"
+          # sg snap_daemon "openstack.sunbeam disable loadbalancer"
+          # sg snap_daemon "openstack.sunbeam disable orchestration"
 
           # Vault has storage requirements > 15G
           # Commenting as CI servers might not have enough disk space
