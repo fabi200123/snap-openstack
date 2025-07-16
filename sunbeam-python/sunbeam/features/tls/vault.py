@@ -136,12 +136,12 @@ class ConfigureVaultCAStep(BaseStep):
         self.preseed.setdefault("certificates", {})
 
         for record in certs_to_process:
-            unit_name = record.get("unit_name")
             csr = record.get("csr")
             app = record.get("application_name")
             relation_id = record.get("relation_id")
+            unit_name = record.get("unit_name")
             if not unit_name:
-                unit_name = str(relation_id)
+                unit_name = f"{self.jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)}"
 
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
@@ -426,15 +426,15 @@ class VaultTlsFeature(TlsFeature):
 
         certs_to_process = json.loads(action_result.get("result", "[]"))
         csrs = {
-            relation: csr
+            unit: csr
             for record in certs_to_process
-            if (relation := str(record.get("relation_id")))
+            if (unit := (str(record.get("unit_name") or jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL))))
             and (csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
             table = Table()
-            table.add_column("Relation ID")
+            table.add_column("Unit name")
             table.add_column("CSR")
             for relation, csr in csrs.items():
                 table.add_row(relation, csr)
