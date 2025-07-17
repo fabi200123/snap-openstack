@@ -361,8 +361,28 @@ class VaultTlsFeature(TlsFeature):
     @pass_method_obj
     def disable_cmd(self, deployment: Deployment, show_hints: bool):
         """Disable TLS Vault feature."""
+        jhelper = JujuHelper(deployment.juju_controller)
+        with jhelper._model(OPENSTACK_MODEL):
+            jhelper.cli(
+                "config",
+                CA_APP_NAME,
+                "common_name=",
+                include_controller=False,
+                json_format=False,
+            )
+            console.print("Cleared Vault common_name configuration")
+            for endpoint in ["traefik-public", "traefik", "traefik-rgw"]:
+                jhelper.cli(
+                    "config",
+                    endpoint,
+                    "external_hostname=",
+                    include_controller=False,
+                    json_format=False,
+                )
+                console.print(
+                    f"Cleared {endpoint} external hostname configuration"
+                )
         self.disable_feature(deployment, show_hints)
-        console.print("TLS Vault feature disabled")
 
     def set_application_names(self, deployment: Deployment) -> list:
         """Application names handled by the terraform plan."""
