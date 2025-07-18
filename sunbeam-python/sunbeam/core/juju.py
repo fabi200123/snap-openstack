@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import time
 import typing
-from collections.abc import Collection, Generator
+from collections.abc import Collection, Generator, Mapping
 from pathlib import Path
 from typing import (
     Callable,
@@ -798,6 +798,23 @@ class JujuHelper:
         """
         with self._model(model) as juju:
             juju.cli("remove-secret", name)
+
+    def get_app_config(self, app: str, model: str) -> Mapping:
+        """Get the config vaule for an application.
+
+        :app: Name of the application.
+        :model: Name of the model.
+        """
+        with self._model(model) as juju:
+            try:
+                config_value: Mapping = juju.config(app)
+            except jubilant.CLIError as e:
+                if "not found" in e.stderr:
+                    raise ApplicationNotFoundException(f"App {app!r} not found") from e
+                raise JujuException(
+                    f"Failed to get config {config_value!r} from application {app!r}"
+                ) from e
+        return config_value
 
     def _generate_juju_credential(self, user: dict) -> dict:
         """Generate juju credential object from kubeconfig user."""

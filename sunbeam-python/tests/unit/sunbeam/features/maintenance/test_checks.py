@@ -8,6 +8,7 @@ from sunbeam.core.juju import ApplicationNotFoundException
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.core.watcher import WATCHER_APPLICATION
 from sunbeam.features.maintenance import checks
+from sunbeam.steps.k8s import KubeClientError
 
 
 @pytest.fixture
@@ -285,3 +286,450 @@ class TestWatcherApplicationExistsCheck:
         check = checks.WatcherApplicationExistsCheck(mock_jhelper)
         result = check.run()
         assert result is False
+
+
+class TestNodeExistCheck:
+    def test_run(self):
+        mock_node = "fake-node"
+        mock_cluster_status = {"fake-node": {"fake-role": "active"}}
+
+        check = checks.NodeExistCheck(mock_node, mock_cluster_status)
+        assert check.run() is True
+
+    def test_run_failed(self):
+        mock_node = "non-exist-node"
+        mock_cluster_status = {"fake-node": {"fake-role": "active"}}
+
+        check = checks.NodeExistCheck(mock_node, mock_cluster_status)
+        assert check.run() is False
+
+
+class TestNoLastNodeCheck:
+    def test_run(self):
+        mock_cluster_status = {
+            "fake-node-1": {"fake-role": "active"},
+            "fake-node-2": {"fake-role": "active"},
+            "fake-node-3": {"fake-role": "active"},
+        }
+
+        check = checks.NoLastNodeCheck(mock_cluster_status, force=False)
+        assert check.run() is True
+
+    def test_run_failed(self):
+        mock_cluster_status = {
+            "fake-node-1": {"fake-role": "active"},
+        }
+
+        check = checks.NoLastNodeCheck(mock_cluster_status, force=False)
+        assert check.run() is False
+
+    def test_forced_run(self):
+        mock_cluster_status = {
+            "fake-node-1": {"fake-role": "active"},
+        }
+
+        check = checks.NoLastNodeCheck(mock_cluster_status, force=True)
+        assert check.run() is True
+
+
+class TestNoLastControlRoleCheck:
+    def test_run(self):
+        mock_cluster_status = {
+            "fake-node-1": {"control": "active"},
+            "fake-node-2": {"control": "active"},
+            "fake-node-3": {"control": "active"},
+        }
+
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = False
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.NoLastControlRoleCheck(
+                mock_deployment, mock_cluster_status, force=False
+            )
+            assert check.run() is True
+
+    def test_run_failed_with_one_control_role(self):
+        mock_cluster_status = {
+            "fake-node-1": {"compute": "active"},
+            "fake-node-2": {"control": "active"},
+            "fake-node-3": {"storage": "active"},
+        }
+
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = False
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.NoLastControlRoleCheck(
+                mock_deployment, mock_cluster_status, force=False
+            )
+            assert check.run() is False
+
+    def test_run_failed_with_one_active_control_role(self):
+        mock_cluster_status = {
+            "fake-node-1": {"control": "active"},
+            "fake-node-2": {"control": "active"},
+            "fake-node-3": {"control": "active"},
+        }
+
+        mock_deployment = Mock()
+
+        mock_node_1 = Mock()
+        mock_node_1.spec.unschedulable = True
+        mock_node_2 = Mock()
+        mock_node_2.spec.unschedulable = True
+        mock_node_3 = Mock()
+        mock_node_3.spec.unschedulable = False
+        mock_nodes = [mock_node_1, mock_node_2, mock_node_3]
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", side_effect=mock_nodes
+            ),
+        ):
+            check = checks.NoLastControlRoleCheck(
+                mock_deployment, mock_cluster_status, force=False
+            )
+            assert check.run() is False
+
+    def test_forced_run(self):
+        mock_cluster_status = {
+            "fake-node-1": {"control": "active"},
+            "fake-node-2": {"control": "active"},
+            "fake-node-3": {"control": "active"},
+        }
+
+        mock_deployment = Mock()
+
+        mock_node_1 = Mock()
+        mock_node_1.spec.unschedulable = True
+        mock_node_2 = Mock()
+        mock_node_2.spec.unschedulable = True
+        mock_node_3 = Mock()
+        mock_node_3.spec.unschedulable = False
+        mock_nodes = [mock_node_1, mock_node_2, mock_node_3]
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", side_effect=mock_nodes
+            ),
+        ):
+            check = checks.NoLastControlRoleCheck(
+                mock_deployment, mock_cluster_status, force=True
+            )
+            assert check.run() is True
+
+
+class TestK8sDqliteRedundancyCheck:
+    def test_run(self):
+        mock_jhelper = Mock()
+        mock_deployment = Mock()
+
+        mock_jhelper.get_app_config.return_value = {"bootstrap-datastore": "dqlite"}
+        mock_jhelper.get_application.return_value = Mock(
+            units={
+                "k8s/0": Mock(),
+                "k8s/1": Mock(),
+                "k8s/2": Mock(),
+            }
+        )
+        mock_jhelper.get_unit_from_machine.return_value = "k8s/0"
+        mock_jhelper.run_cmd_on_machine_unit_payload.side_effect = [
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+        ]
+
+        check = checks.K8sDqliteRedundancyCheck(
+            "fake-node", mock_jhelper, mock_deployment, force=False
+        )
+        assert check.run() is True
+
+    def test_run_skipped_with_not_dqlite(self):
+        mock_jhelper = Mock()
+        mock_deployment = Mock()
+
+        mock_jhelper.get_app_config.return_value = {"bootstrap-datastore": "etcd"}
+        mock_jhelper.get_application.return_value = Mock(
+            units={
+                "k8s/0": Mock(),
+                "k8s/1": Mock(),
+                "k8s/2": Mock(),
+            }
+        )
+        mock_jhelper.get_unit_from_machine.return_value = "k8s/0"
+        mock_jhelper.run_cmd_on_machine_unit_payload.side_effect = [
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+        ]
+
+        check = checks.K8sDqliteRedundancyCheck(
+            "fake-node", mock_jhelper, mock_deployment, force=False
+        )
+        assert check.run() is True
+
+    def test_run_failed_with_not_enough_k8s_dqlite(self):
+        mock_jhelper = Mock()
+        mock_deployment = Mock()
+
+        mock_jhelper.get_app_config.return_value = {"bootstrap-datastore": "dqlite"}
+        mock_jhelper.get_application.return_value = Mock(
+            units={
+                "k8s/0": Mock(),
+                "k8s/1": Mock(),
+                "k8s/2": Mock(),
+            }
+        )
+        mock_jhelper.get_unit_from_machine.return_value = "k8s/0"
+        mock_jhelper.run_cmd_on_machine_unit_payload.side_effect = [
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  inactive   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  inactive   -"),
+        ]
+
+        check = checks.K8sDqliteRedundancyCheck(
+            "fake-node", mock_jhelper, mock_deployment, force=False
+        )
+        assert check.run() is False
+
+    def test_force_run_with_not_enough_k8s_dqlite(self):
+        mock_jhelper = Mock()
+        mock_deployment = Mock()
+
+        mock_jhelper.get_app_config.return_value = {"bootstrap-datastore": "dqlite"}
+        mock_jhelper.get_application.return_value = Mock(
+            units={
+                "k8s/0": Mock(),
+                "k8s/1": Mock(),
+                "k8s/2": Mock(),
+            }
+        )
+        mock_jhelper.get_unit_from_machine.return_value = "k8s/0"
+        mock_jhelper.run_cmd_on_machine_unit_payload.side_effect = [
+            Mock(stdout="k8s.k8s-dqlite  enabled  active   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  inactive   -"),
+            Mock(stdout="k8s.k8s-dqlite  enabled  inactive   -"),
+        ]
+
+        check = checks.K8sDqliteRedundancyCheck(
+            "fake-node", mock_jhelper, mock_deployment, force=True
+        )
+        assert check.run() is True
+
+
+class TestNoJujuControllerPodCheck:
+    def test_run(self):
+        mock_node = "fake-node"
+        mock_deployment = Mock(type="local", juju_controller=Mock(is_external=False))
+
+        mock_pod_1 = Mock()
+        mock_pod_1.spec.nodeName = mock_node
+        mock_pod_1.metadata.name = "some-pod"
+
+        mock_pods = [mock_pod_1]
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.fetch_pods", return_value=mock_pods
+            ),
+        ):
+            check = checks.NoJujuControllerPodCheck(mock_node, mock_deployment)
+            assert check.run() is True
+
+    def test_run_skipped_maas_deployment(self):
+        mock_node = "fake-node"
+        mock_deployment = Mock(type="maas", juju_controller=Mock(is_external=True))
+
+        check = checks.NoJujuControllerPodCheck(mock_node, mock_deployment)
+        assert check.run() is True
+
+    def test_run_skipped_external_juju(self):
+        mock_node = "fake-node"
+        mock_deployment = Mock(type="local", juju_controller=Mock(is_external=True))
+
+        check = checks.NoJujuControllerPodCheck(mock_node, mock_deployment)
+        assert check.run() is True
+
+    def test_run_failed(self):
+        mock_node = "fake-node"
+        mock_deployment = Mock(type="local", juju_controller=Mock(is_external=False))
+
+        mock_pod_1 = Mock()
+        mock_pod_1.spec.nodeName = mock_node
+        mock_pod_1.metadata.name = "controller-0"
+
+        mock_pods = [mock_pod_1]
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.fetch_pods", return_value=mock_pods
+            ),
+        ):
+            check = checks.NoJujuControllerPodCheck(mock_node, mock_deployment)
+            assert check.run() is False
+
+    def test_run_failed_kube_client_error(self):
+        mock_node = "fake-node"
+        mock_deployment = Mock(type="local", juju_controller=Mock(is_external=False))
+
+        with patch(
+            "sunbeam.features.maintenance.checks.get_kube_client",
+            side_effect=KubeClientError,
+        ):
+            check = checks.NoJujuControllerPodCheck(mock_node, mock_deployment)
+            assert check.run() is False
+
+
+class TestControlRoleNodeCordonedCheck:
+    def test_run(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = True
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.ControlRoleNodeCordonedCheck(
+                mock_node, mock_deployment, force=False
+            )
+            assert check.run() is True
+
+    def test_run_failed(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = False
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.ControlRoleNodeCordonedCheck(
+                mock_node, mock_deployment, force=False
+            )
+            assert check.run() is False
+
+    def test_run_failed_kube_client_error(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = False
+
+        with patch(
+            "sunbeam.features.maintenance.checks.get_kube_client",
+            side_effect=KubeClientError,
+        ):
+            check = checks.ControlRoleNodeCordonedCheck(
+                mock_node, mock_deployment, force=False
+            )
+            assert check.run() is False
+
+    def test_force_run_with_uncordon_node(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = False
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.ControlRoleNodeCordonedCheck(
+                mock_node, mock_deployment, force=True
+            )
+            assert check.run() is True
+
+
+class TestUncontrolRoleNodeCordonedCheck:
+    def test_run(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = False
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.ControlRoleNodeUncordonedCheck(
+                mock_node, mock_deployment, force=False
+            )
+            assert check.run() is True
+
+    def test_run_failed(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = True
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.ControlRoleNodeUncordonedCheck(
+                mock_node, mock_deployment, force=False
+            )
+            assert check.run() is False
+
+    def test_run_failed_kube_client_error(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = True
+
+        with patch(
+            "sunbeam.features.maintenance.checks.get_kube_client",
+            side_effect=KubeClientError,
+        ):
+            check = checks.ControlRoleNodeUncordonedCheck(
+                mock_node, mock_deployment, force=False
+            )
+            assert check.run() is False
+
+    def test_force_run_with_cordon_node(self):
+        mock_deployment = Mock()
+
+        mock_node = Mock()
+        mock_node.spec.unschedulable = True
+
+        with (
+            patch("sunbeam.features.maintenance.checks.get_kube_client"),
+            patch(
+                "sunbeam.features.maintenance.checks.find_node", return_value=mock_node
+            ),
+        ):
+            check = checks.ControlRoleNodeUncordonedCheck(
+                mock_node, mock_deployment, force=True
+            )
+            assert check.run() is True
