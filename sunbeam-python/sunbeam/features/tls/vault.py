@@ -44,6 +44,7 @@ from sunbeam.features.interface.utils import (
     validate_ca_certificate,
     validate_ca_chain,
 )
+from sunbeam.features.interface.v1.base import FeatureRequirement
 from sunbeam.features.interface.v1.openstack import (
     TerraformPlanLocation,
     WaitForApplicationsStep,
@@ -226,6 +227,7 @@ class ConfigureVaultCAStep(BaseStep):
 class VaultTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
+    requires = {FeatureRequirement("vault>1")}
     name = "tls.vault"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
@@ -386,26 +388,26 @@ class VaultTlsFeature(TlsFeature):
 
     def set_tfvars_on_disable(self, deployment: Deployment) -> dict:
         """Set terraform variables to disable the application."""
-        tfvars: dict[str, None | str | bool] = {"traefik-to-tls-provider": None}
+        tfvars: dict[str, typing.Any] = {"traefik-to-tls-provider": None}
         provider_config = self.provider_config(deployment)
         endpoints = provider_config.get("endpoints", [])
 
         # Remove Traefik endpoints external hostnames
         if "public" in endpoints:
             tfvars.update(
-                {"enable-tls-for-public-endpoint": False, "traefik-public-config": None}
+                {"enable-tls-for-public-endpoint": False, "traefik-public-config": {}}
             )
         if "internal" in endpoints:
             tfvars.update(
-                {"enable-tls-for-internal-endpoint": False, "traefik-config": None}
+                {"enable-tls-for-internal-endpoint": False, "traefik-config": {}}
             )
         if "rgw" in endpoints:
             tfvars.update(
-                {"enable-tls-for-rgw-endpoint": False, "traefik-rgw-config": None}
+                {"enable-tls-for-rgw-endpoint": False, "traefik-rgw-config": {}}
             )
 
         # Remove Vault common_name
-        tfvars.update({"vault-config": None})
+        tfvars.update({"vault-config": {}})
 
         return tfvars
 
