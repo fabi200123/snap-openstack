@@ -44,6 +44,7 @@ from sunbeam.features.interface.utils import (
     validate_ca_certificate,
     validate_ca_chain,
 )
+from sunbeam.features.interface.v1.base import FeatureRequirement
 from sunbeam.features.interface.v1.openstack import (
     TerraformPlanLocation,
     WaitForApplicationsStep,
@@ -136,12 +137,14 @@ class ConfigureVaultCAStep(BaseStep):
         self.preseed.setdefault("certificates", {})
 
         for record in certs_to_process:
-            unit_name = record.get("unit_name")
             csr = record.get("csr")
             app = record.get("application_name")
             relation_id = record.get("relation_id")
+            unit_name = record.get("unit_name")
             if not unit_name:
-                unit_name = str(relation_id)
+                unit_name = (
+                    f"{self.jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)}"
+                )
 
             # Each unit can have multiple CSRs
             subject = get_subject_from_csr(csr)
@@ -224,6 +227,7 @@ class ConfigureVaultCAStep(BaseStep):
 class VaultTlsFeature(TlsFeature):
     version = Version("0.0.1")
 
+    requires = {FeatureRequirement("vault>1")}
     name = "tls.vault"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
@@ -362,7 +366,6 @@ class VaultTlsFeature(TlsFeature):
     def disable_cmd(self, deployment: Deployment, show_hints: bool):
         """Disable TLS Vault feature."""
         self.disable_feature(deployment, show_hints)
-        console.print("TLS Vault feature disabled")
 
     def set_application_names(self, deployment: Deployment) -> list:
         """Application names handled by the terraform plan."""
@@ -385,9 +388,28 @@ class VaultTlsFeature(TlsFeature):
 
     def set_tfvars_on_disable(self, deployment: Deployment) -> dict:
         """Set terraform variables to disable the application."""
-        return {
-            "traefik-to-tls-provider": None,
-        }
+        tfvars: dict[str, typing.Any] = {"traefik-to-tls-provider": None}
+        provider_config = self.provider_config(deployment)
+        endpoints = provider_config.get("endpoints", [])
+
+        # Remove Traefik endpoints external hostnames
+        if "public" in endpoints:
+            tfvars.update(
+                {"enable-tls-for-public-endpoint": False, "traefik-public-config": {}}
+            )
+        if "internal" in endpoints:
+            tfvars.update(
+                {"enable-tls-for-internal-endpoint": False, "traefik-config": {}}
+            )
+        if "rgw" in endpoints:
+            tfvars.update(
+                {"enable-tls-for-rgw-endpoint": False, "traefik-rgw-config": {}}
+            )
+
+        # Remove Vault common_name
+        tfvars.update({"vault-config": {}})
+
+        return tfvars
 
     def set_tfvars_on_resize(
         self, deployment: Deployment, config: FeatureConfig
@@ -426,15 +448,22 @@ class VaultTlsFeature(TlsFeature):
 
         certs_to_process = json.loads(action_result.get("result", "[]"))
         csrs = {
-            relation: csr
+            unit: csr
             for record in certs_to_process
-            if (relation := str(record.get("relation_id")))
+            if (
+                unit := (
+                    str(
+                        record.get("unit_name")
+                        or jhelper.get_leader_unit(CA_APP_NAME, OPENSTACK_MODEL)
+                    )
+                )
+            )
             and (csr := record.get("csr"))
         }
 
         if format == FORMAT_TABLE:
             table = Table()
-            table.add_column("Relation ID")
+            table.add_column("Unit name")
             table.add_column("CSR")
             for relation, csr in csrs.items():
                 table.add_row(relation, csr)
@@ -632,13 +661,5 @@ class VaultTlsFeature(TlsFeature):
                 found: {', '.join(external.values())}"
             )
         common_domain = domains.pop()
-
-        with jhelper._model(OPENSTACK_MODEL):
-            jhelper.cli(
-                "config",
-                CA_APP_NAME,
-                f"common_name={common_domain}",
-                include_controller=False,
-                json_format=False,
-            )
+        tfvars.update({"vault-config": {"common_name": common_domain}})
         console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")
