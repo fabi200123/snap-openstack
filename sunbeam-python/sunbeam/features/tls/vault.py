@@ -491,9 +491,11 @@ class VaultTlsFeature(TlsFeature):
         """Configure Unit certs."""
         client = deployment.get_client()
         manifest = deployment.get_manifest(manifest_path)
+        tls_grp = manifest.features.get("tls")
+        vault_feat = tls_grp.root.get("vault") if tls_grp else None
         preseed = {}
-        if (ca := manifest.get_feature(self.name.split(".")[-1])) and ca.config:
-            preseed = ca.config.model_dump(by_alias=True)
+        if vault_feat and vault_feat.config:
+            preseed = vault_feat.config.model_dump(by_alias=True)
         model = OPENSTACK_MODEL
         apps_to_monitor = [CA_APP_NAME]
 
