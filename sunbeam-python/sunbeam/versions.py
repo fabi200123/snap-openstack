@@ -207,6 +207,15 @@ DEPLOY_MICROCEPH_TFVAR_MAP: VarMap = {
         }
     }
 }
+DEPLOY_MICROOVN_TFVAR_MAP: VarMap = {
+    "charms": {
+        "microovn": {
+            "channel": "charm_microovn_channel",
+            "revision": "charm_microovn_revision",
+            "config": "charm_microovn_config",
+        }
+    }
+}
 DEPLOY_OPENSTACK_HYPERVISOR_TFVAR_MAP: VarMap = {
     "charms": {
         "openstack-hypervisor": {
