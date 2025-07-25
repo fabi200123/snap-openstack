@@ -581,7 +581,7 @@ def deploy_and_migrate_juju_controller(
     multiple=True,
     default=["control", "compute"],
     callback=validate_roles,
-    help="Specify additional roles, compute or storage, for the "
+    help="Specify additional roles, compute, storage or network, for the "
     "bootstrap node. Defaults to the compute role."
     " Can be repeated and comma separated.",
 )
@@ -636,6 +636,12 @@ def bootstrap(
     is_control_node = any(role.is_control_node() for role in roles)
     is_compute_node = any(role.is_compute_node() for role in roles)
     is_storage_node = any(role.is_storage_node() for role in roles)
+    is_network_node = any(role.is_network_node() for role in roles)
+
+    if is_network_node and is_compute_node:
+        raise click.ClickException(
+            "A node cannot be both a compute and network node at the same time."
+        )
 
     fqdn = utils.get_fqdn()
 
@@ -1179,6 +1185,12 @@ def join(
     is_control_node = any(role.is_control_node() for role in roles)
     is_compute_node = any(role.is_compute_node() for role in roles)
     is_storage_node = any(role.is_storage_node() for role in roles)
+    is_network_node = any(role.is_network_node() for role in roles)
+
+    if is_network_node and is_compute_node:
+        raise click.ClickException(
+            "A node cannot be both a compute and network node at the same time."
+        )
 
     # Register juju user with same name as Node fqdn
     name = utils.get_fqdn()
