@@ -934,9 +934,6 @@ def configure_sriov(
     admin_credentials = retrieve_admin_credentials(jhelper, OPENSTACK_MODEL)
     admin_credentials["OS_INSECURE"] = "true"
 
-    tfplan = "demo-setup"
-    tfhelper = deployment.get_tfhelper(tfplan)
-    tfhelper.env = (tfhelper.env or {}) | admin_credentials
     tfhelper_hypervisor = deployment.get_tfhelper("hypervisor-plan")
 
     plan: list[BaseStep] = [

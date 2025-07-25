@@ -10,6 +10,7 @@ import sunbeam.core.questions
 import sunbeam.provider.local.steps as local_steps
 import sunbeam.utils
 from sunbeam.core.common import ResultType
+from sunbeam.provider.common import nic_utils
 
 
 @pytest.fixture()
@@ -59,7 +60,7 @@ def deployment():
 
 @pytest.fixture()
 def fetch_nics():
-    with patch.object(local_steps, "_fetch_nics") as p:
+    with patch.object(nic_utils, "fetch_nics") as p:
         yield p
 
 

@@ -5,13 +5,13 @@ import contextlib
 import json
 import logging
 from functools import cache
-from typing import Any, Tuple
+from typing import Any
 
 from rich.console import Console
 from rich.status import Status
 
 import sunbeam.core.questions
-from sunbeam import devspec, utils
+from sunbeam import utils
 from sunbeam.clusterd.client import Client
 from sunbeam.clusterd.service import ClusterServiceUnavailableException
 from sunbeam.commands.configure import (
@@ -27,6 +27,7 @@ from sunbeam.core.common import (
 )
 from sunbeam.core.juju import ActionFailedException, JujuHelper
 from sunbeam.core.manifest import Manifest
+from sunbeam.provider.common import nic_utils
 from sunbeam.steps import hypervisor
 from sunbeam.steps.cluster_status import ClusterStatusStep
 from sunbeam.steps.clusterd import CLUSTERD_PORT
@@ -46,16 +47,6 @@ def local_hypervisor_questions():
             ),
         ),
     }
-
-
-def _fetch_nics(client: Client, name: str, jhelper: JujuHelper, model: str):
-    # TODO: consider caching this.
-    LOG.debug("Fetching nics...")
-    node = client.cluster.get_node_info(name)
-    machine_id = str(node.get("machineid"))
-    unit = jhelper.get_unit_from_machine("openstack-hypervisor", machine_id, model)
-    action_result = jhelper.run_action(unit, model, "list-nics")
-    return json.loads(action_result.get("result", "{}"))
 
 
 class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
@@ -91,7 +82,9 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
             context = contextlib.nullcontext()
 
         with context:
-            nics = _fetch_nics(self.client, self.names[0], self.jhelper, self.model)
+            nics = nic_utils.fetch_nics(
+                self.client, self.names[0], self.jhelper, self.model
+            )
 
         all_nics: list[dict] | None = nics.get("nics")
         candidate_nics: list[str] | None = nics.get("candidates")
@@ -279,8 +272,6 @@ def sriov_questions():
 class LocalConfigSRIOVStep(BaseStep):
     """Prompt user for SR-IOV configuration."""
 
-    # TODO: this might be reused as a maas step.
-
     def __init__(
         self,
         client: Client,
@@ -290,7 +281,7 @@ class LocalConfigSRIOVStep(BaseStep):
         manifest: Manifest | None = None,
         accept_defaults: bool = False,
     ):
-        super().__init__("SR-IOV Settings", "Ask user for SR-IOV settings")
+        super().__init__("SR-IOV Settings", "Configure SR-IOV")
         self.client = client
         self.node_name = node_name
         self.jhelper = jhelper
@@ -389,7 +380,9 @@ class LocalConfigSRIOVStep(BaseStep):
             accept_defaults=self.accept_defaults,
             show_hint=show_hint,
         )
-        nics = _fetch_nics(self.client, self.node_name, self.jhelper, self.model)
+        nics = nic_utils.fetch_nics(
+            self.client, self.node_name, self.jhelper, self.model
+        )
         sriov_nics = [nic for nic in nics["nics"] if nic.get("sriov_available")]
 
         if sriov_nics:
@@ -401,8 +394,8 @@ class LocalConfigSRIOVStep(BaseStep):
 
                 for nic in sriov_nics:
                     nic_str_repr = self._get_nic_str_repr(nic)
-                    whitelisted, physnet = self._is_sriov_nic_whitelisted(
-                        nic, pci_whitelist, excluded_devices
+                    whitelisted, physnet = nic_utils.is_sriov_nic_whitelisted(
+                        self.node_name, nic, pci_whitelist, excluded_devices
                     )
 
                     question = f"Add network adapter to PCI whitelist? {nic_str_repr} "
@@ -410,7 +403,9 @@ class LocalConfigSRIOVStep(BaseStep):
                         question, default_value=whitelisted
                     ).ask()
                     if not should_whitelist:
-                        self._exclude_sriov_nic(nic, pci_whitelist, excluded_devices)
+                        nic_utils.exclude_sriov_nic(
+                            self.node_name, nic, pci_whitelist, excluded_devices
+                        )
                         continue
 
                     question = (
@@ -422,94 +417,12 @@ class LocalConfigSRIOVStep(BaseStep):
                         question,
                         default_value=physnet,
                     ).ask()
-                    self._whitelist_sriov_nic(
-                        nic, pci_whitelist, excluded_devices, physnet
+                    nic_utils.whitelist_sriov_nic(
+                        self.node_name, nic, pci_whitelist, excluded_devices, physnet
                     )
 
         else:
             LOG.info("No SR-IOV devics detected, skipping SR-IOV configuration.")
-
-    def _is_sriov_nic_whitelisted(
-        self, nic: dict, pci_whitelist: list[dict], excluded_devices: dict[str, list]
-    ) -> Tuple[bool, str | None]:
-        """Returns the (is_whitelisted>, physnet) tuple."""
-        pci_address = nic["pci_address"]
-
-        node_excluded_devices = excluded_devices.get(self.node_name) or []
-        if pci_address in node_excluded_devices:
-            return False, None
-
-        for spec_dict in pci_whitelist:
-            if not isinstance(spec_dict, dict):
-                raise ValueError(
-                    "Invalid device spec, expecting a dict: %s." % spec_dict
-                )
-
-            pci_spec = devspec.PciDeviceSpec(spec_dict)
-            dev = {
-                "vendor_id": nic["vendor_id"].replace("0x", ""),
-                "product_id": nic["product_id"].replace("0x", ""),
-                "address": nic["pci_address"],
-                "parent_addr": nic["pf_pci_address"],
-            }
-            match = pci_spec.match(dev)
-            if match:
-                return True, spec_dict.get("physical_network")
-
-        return False, None
-
-    def _whitelist_sriov_nic(
-        self,
-        nic: dict,
-        pci_whitelist: list[dict],
-        excluded_devices: dict[str, list],
-        physnet: str | None,
-    ):
-        LOG.debug("Whitelisting SR-IOV nic: %s %s", nic["name"], nic["pci_address"])
-        pci_address = nic["pci_address"]
-
-        node_excluded_devices = excluded_devices.get(self.node_name) or []
-        if pci_address in node_excluded_devices:
-            LOG.debug(
-                "Removing SR-IOV nic from the exclusion list: %s %s",
-                nic["name"],
-                nic["pci_address"],
-            )
-            node_excluded_devices.remove(pci_address)
-
-        # Update the global whitelist if needed.
-        whitelisted = self._is_sriov_nic_whitelisted(
-            nic, pci_whitelist, excluded_devices
-        )[0]
-        if not whitelisted:
-            # Openstack expects this to be null when using hw offloading
-            # with overlay networks.
-            # https://docs.openstack.org/neutron/latest/admin/config-ovs-offload.html
-            if not physnet:
-                physnet = None
-            elif physnet.lower() in ("none", "null"):
-                physnet = None
-
-            new_dev_spec = {
-                "address": nic["pci_address"],
-                "vendor_id": nic["vendor_id"].replace("0x", ""),
-                "product_id": nic["product_id"].replace("0x", ""),
-                "physical_network": physnet,
-            }
-            pci_whitelist.append(new_dev_spec)
-        else:
-            LOG.debug(
-                "SR-IOV nic already whitelisted: %s %s", nic["name"], nic["pci_address"]
-            )
-
-    def _exclude_sriov_nic(
-        self, nic: dict, pci_whitelist: list[dict], excluded_devices: dict[str, list]
-    ):
-        LOG.debug("Excluding SR-IOV nic: %s", nic["name"])
-        if self.node_name not in excluded_devices:
-            excluded_devices[self.node_name] = []
-        if nic["pci_address"] not in excluded_devices[self.node_name]:
-            excluded_devices[self.node_name].append(nic["pci_address"])
 
     def _get_nic_str_repr(self, nic: dict):
         """Get the nic string representation."""
@@ -531,8 +444,8 @@ class LocalConfigSRIOVStep(BaseStep):
         console.print("Found the following SR-IOV capable devices:")
 
         for nic in sriov_nics:
-            whitelisted, physnet = self._is_sriov_nic_whitelisted(
-                nic, pci_whitelist, excluded_devices
+            whitelisted, physnet = nic_utils.is_sriov_nic_whitelisted(
+                self.node_name, nic, pci_whitelist, excluded_devices
             )
             checkbox = "X" if whitelisted else " "
             nic_str_repr = self._get_nic_str_repr(nic)
@@ -574,7 +487,7 @@ class LocalConfigSRIOVStep(BaseStep):
             )
         except (ActionFailedException, TimeoutError):
             msg = f"Unable to set hypervisor {name} configuration"
-            LOG.debug(msg, exc_info=True)
+            LOG.error(msg, exc_info=True)
             return Result(ResultType.FAILED, msg)
 
         return Result(ResultType.COMPLETED)
