@@ -81,7 +81,7 @@ def whitelist_sriov_nic(
         # https://docs.openstack.org/neutron/latest/admin/config-ovs-offload.html
         if not physnet:
             physnet = None
-        elif physnet.lower() in ("none", "null"):
+        elif physnet.lower() in ("none", "null", "no-physnet"):
             physnet = None
 
         new_dev_spec = {

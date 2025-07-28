@@ -418,7 +418,7 @@ class LocalConfigSRIOVStep(BaseStep):
 
                     question = (
                         f"Specify the physical network for {nic_str_repr} "
-                        "or leave empty if using hardware offloading with "
+                        "or pass 'no-physnet' if using hardware offloading with "
                         "overlay networks"
                     )
                     physnet = sunbeam.core.questions.PromptQuestion(

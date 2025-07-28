@@ -2204,7 +2204,7 @@ class MaasConfigSRIOVStep(BaseStep):
                 if not groups or len(groups) > 1:
                     continue
                 physnet = groups[0]
-                if physnet == "no-physnet":
+                if physnet in ("none", "null", "no-physnet"):
                     physnet = None
                 sriov_nics[nic["name"]] = {
                     "name": nic["name"],
