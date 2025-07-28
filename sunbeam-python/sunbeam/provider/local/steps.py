@@ -280,6 +280,7 @@ class LocalConfigSRIOVStep(BaseStep):
         model: str,
         manifest: Manifest | None = None,
         accept_defaults: bool = False,
+        show_initial_prompt: bool = True,
     ):
         super().__init__("SR-IOV Settings", "Configure SR-IOV")
         self.client = client
@@ -289,6 +290,9 @@ class LocalConfigSRIOVStep(BaseStep):
         self.manifest = manifest
         self.accept_defaults = accept_defaults
         self.variables: dict = {}
+        # Avoid the "Configure SR-IOV?" question if the user
+        # specifically asked for this.
+        self.show_initial_prompt = show_initial_prompt
 
     def prompt(
         self,
@@ -386,7 +390,11 @@ class LocalConfigSRIOVStep(BaseStep):
         sriov_nics = [nic for nic in nics["nics"] if nic.get("sriov_available")]
 
         if sriov_nics:
-            configure_sriov = sriov_bank.configure_sriov.ask()
+            if self.show_initial_prompt:
+                configure_sriov = sriov_bank.configure_sriov.ask()
+            else:
+                configure_sriov = True
+
             if configure_sriov:
                 self._show_sriov_nics(
                     console, sriov_nics, pci_whitelist, excluded_devices

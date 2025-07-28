@@ -944,6 +944,7 @@ def configure_sriov(
             deployment.openstack_machines_model,
             manifest,
             accept_defaults,
+            show_initial_prompt=False,
         ),
         ReapplyHypervisorTerraformPlanStep(
             client,
