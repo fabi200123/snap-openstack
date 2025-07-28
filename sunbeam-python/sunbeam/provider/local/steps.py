@@ -387,7 +387,45 @@ class LocalConfigSRIOVStep(BaseStep):
         nics = nic_utils.fetch_nics(
             self.client, self.node_name, self.jhelper, self.model
         )
-        sriov_nics = [nic for nic in nics["nics"] if nic.get("sriov_available")]
+
+        pci_address_map: dict[str, str] = {}
+        sriov_nics = []
+        for nic in nics["nics"]:
+            nic_name = nic["name"]
+            pci_address = nic["pci_address"]
+
+            if not nic["sriov_available"]:
+                LOG.debug("The nic does not support SR-IOV: %s", nic_name)
+                continue
+            if not pci_address:
+                LOG.debug("No nic PCI address: %s", nic_name)
+                continue
+            if pci_address in pci_address_map:
+                # We'll filter out interfaces that have duplicate PCI addresses,
+                # keeping only the first occurrence.
+                #
+                # For example, Mellanox ConnectX 6 will create one representor
+                # network function for each VF, having the same address as the PF.
+                #
+                # Bus info          Device          Class      Description
+                # ========================================================
+                # pci@0000:03:00.0  enp3s0f0np0     network    ConnectX-6 Dx
+                # pci@0000:03:00.1  enp3s0f1np1     network    ConnectX-6 Dx
+                # pci@0000:03:00.2  enp3s0f0v0      network    ConnectX Family mlx5 VF
+                # pci@0000:03:00.3  enp3s0f0v1      network    ConnectX Family mlx5 VF
+                # ...
+                # pci@0000:03:00.0  enp3s0f0r0      network    Ethernet interface
+                # pci@0000:03:00.0  enp3s0f0r1      network    Ethernet interface
+                LOG.debug(
+                    "Duplicate PCI address: %s, interface names: %s %s.",
+                    pci_address,
+                    nic_name,
+                    pci_address_map[pci_address],
+                )
+                continue
+
+            pci_address_map[pci_address] = nic_name
+            sriov_nics.append(nic)
 
         if sriov_nics:
             if self.show_initial_prompt:
