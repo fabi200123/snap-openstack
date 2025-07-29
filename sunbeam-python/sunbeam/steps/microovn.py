@@ -94,13 +94,7 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
         tfvars: dict[str, Any] = {
-            "gateway_interface": questions.PromptQuestion(
-                "External gateway interface",
-                description=(
-                    "The interface to use for the external gateway. "
-                    "This interface will be used to connect to the external network."
-                ),
-            ),
+            "gateway_interface": "enp86s0"
         }
         return tfvars
 

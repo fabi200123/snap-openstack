@@ -12,6 +12,7 @@ OVN_CHANNEL = "24.03/stable"
 RABBITMQ_CHANNEL = "3.12/stable"
 TRAEFIK_CHANNEL = "latest/stable"
 MICROCEPH_CHANNEL = "squid/stable"
+MICROOVN_CHANNEL = "latest/edge"
 SUNBEAM_MACHINE_CHANNEL = "2024.1/stable"
 SUNBEAM_CLUSTERD_CHANNEL = "2024.1/stable"
 SNAP_SUNBEAM_CLUSTERD_CHANNEL = "2024.1/stable"
@@ -59,6 +60,7 @@ MISC_CHARMS_K8S = {
 }
 MACHINE_CHARMS = {
     "microceph": MICROCEPH_CHANNEL,
+    "microovn": MICROOVN_CHANNEL,
     "k8s": K8S_CHANNEL,
     "openstack-hypervisor": OPENSTACK_CHANNEL,
     "sunbeam-machine": SUNBEAM_MACHINE_CHANNEL,
