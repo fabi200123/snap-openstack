@@ -18,6 +18,7 @@ from sunbeam.steps.microceph import (
     DeployMicrocephApplicationStep,
     SetCephMgrPoolSizeStep,
 )
+from sunbeam.steps.microovn import DeployMicroOVNApplicationStep
 from sunbeam.steps.openstack import DeployControlPlaneStep
 from sunbeam.utils import click_option_show_hints
 
@@ -47,11 +48,13 @@ def resize(
     manifest = deployment.get_manifest()
 
     openstack_tfhelper = deployment.get_tfhelper("openstack-plan")
+    microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
     microceph_tfhelper = deployment.get_tfhelper("microceph-plan")
     cinder_volume_tfhelper = deployment.get_tfhelper("cinder-volume-plan")
     jhelper = JujuHelper(deployment.juju_controller)
 
     storage_nodes = client.cluster.list_nodes_by_role("storage")
+    network_nodes = client.cluster.list_nodes_by_role("network")
 
     parameter_source = click.get_current_context().get_parameter_source("force")
     if parameter_source == ParameterSource.COMMANDLINE:
@@ -76,6 +79,23 @@ def resize(
                     client,
                     jhelper,
                     deployment.openstack_machines_model,
+                ),
+            ]
+        )
+
+    if len(network_nodes):
+        # Add microovn units to the network nodes
+        plan.extend(
+            [
+                TerraformInitStep(microovn_tfhelper),
+                DeployMicroOVNApplicationStep(
+                    deployment,
+                    client,
+                    microovn_tfhelper,
+                    jhelper,
+                    manifest,
+                    deployment.openstack_machines_model,
+                    refresh=True,
                 ),
             ]
         )

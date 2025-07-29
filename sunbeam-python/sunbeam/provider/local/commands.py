@@ -158,6 +158,10 @@ from sunbeam.steps.microceph import (
     DeployMicrocephApplicationStep,
     RemoveMicrocephUnitsStep,
 )
+from sunbeam.steps.microovn import (
+    AddMicroOVNUnitsStep,
+    DeployMicroOVNApplicationStep,
+)
 from sunbeam.steps.openstack import (
     DeployControlPlaneStep,
     OpenStackPatchLoadBalancerServicesIPStep,
@@ -796,8 +800,29 @@ def bootstrap(
         )
     )
 
+    # Deploy MicroOVN application during bootstrap irrespective of node role.
+    microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
+    plan1.append(TerraformInitStep(microovn_tfhelper))
+    plan1.append(
+        DeployMicroOVNApplicationStep(
+            deployment,
+            client,
+            microovn_tfhelper,
+            jhelper,
+            manifest,
+            deployment.openstack_machines_model,
+        )
+    )
+
     openstack_tfhelper = deployment.get_tfhelper("openstack-plan")
     plan1.append(TerraformInitStep(openstack_tfhelper))
+
+    if is_network_node:
+        plan1.append(
+            AddMicroOVNUnitsStep(
+                client, fqdn, jhelper, deployment.openstack_machines_model
+            )
+        )
 
     if is_storage_node:
         plan1.append(
@@ -1314,6 +1339,12 @@ def join(
     hypervisor_tfhelper = deployment.get_tfhelper("hypervisor-plan")
     plan4.append(TerraformInitStep(openstack_tfhelper))
     plan4.append(TerraformInitStep(hypervisor_tfhelper))
+    if is_network_node:
+        plan4.append(
+            AddMicroOVNUnitsStep(
+                client, name, jhelper, deployment.openstack_machines_model
+            )
+        )
     if is_storage_node:
         plan4.append(
             AddMicrocephUnitsStep(

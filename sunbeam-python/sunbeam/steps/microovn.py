@@ -60,7 +60,7 @@ def microovn_questions():
     }
 
 
-class DeployMicroovnApplicationStep(DeployMachineApplicationStep):
+class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
     """Deploy Microovn application using Terraform."""
 
     def __init__(
@@ -93,90 +93,19 @@ class DeployMicroovnApplicationStep(DeployMachineApplicationStep):
 
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
-        storage_nodes = self.client.cluster.list_nodes_by_role("storage")
         tfvars: dict[str, Any] = {
-            "endpoint_bindings": [
-                {
-                    "space": self.deployment.get_space(Networks.MANAGEMENT),
-                },
-                {
-                    # microcluster related space
-                    "endpoint": "admin",
-                    "space": self.deployment.get_space(Networks.MANAGEMENT),
-                },
-                {
-                    "endpoint": "peers",
-                    "space": self.deployment.get_space(Networks.MANAGEMENT),
-                },
-                {
-                    # internal activites for ceph services, heartbeat + replication
-                    "endpoint": "cluster",
-                    "space": self.deployment.get_space(Networks.STORAGE_CLUSTER),
-                },
-                {
-                    # access to ceph services
-                    "endpoint": "public",
-                    "space": self.deployment.get_space(Networks.STORAGE),
-                },
-                {
-                    # acess to ceph services for related applications
-                    "endpoint": "ceph",
-                    "space": self.deployment.get_space(Networks.STORAGE),
-                },
-                # both mds and radosgw are specialized clients to access ceph services
-                # they will not be used by sunbeam,
-                # set them the same as other ceph clients
-                {
-                    "endpoint": "mds",
-                    "space": self.deployment.get_space(Networks.STORAGE),
-                },
-                {
-                    "endpoint": "radosgw",
-                    "space": self.deployment.get_space(Networks.STORAGE),
-                },
-            ],
-            "charm_microceph_config": {
-                "enable-rgw": "*",
-                "namespace-projects": True,
-                "default-pool-size": ceph_replica_scale(len(storage_nodes)),
-                "region": read_config(self.client, REGION_CONFIG_KEY).get(
-                    "region", DEFAULT_REGION
+            "gateway_interface": questions.PromptQuestion(
+                "External gateway interface",
+                description=(
+                    "The interface to use for the external gateway. "
+                    "This interface will be used to connect to the external network."
                 ),
-            },
+            ),
         }
-
-        if len(storage_nodes):
-            openstack_tfhelper = self.deployment.get_tfhelper("openstack-plan")
-            openstack_tf_output = openstack_tfhelper.output()
-
-            # Retreiving terraform state for non-existing plan using
-            # data.terraform_remote_state errros out with message "No stored state
-            # was found for the given workspace in the given backend".
-            # It is not possible to try/catch this error, see
-            # https://github.com/hashicorp/terraform-provider-google/issues/11035
-            # The Offer URLs are retrieved by running terraform output on
-            # openstack plan and pass them as variables.
-            keystone_endpoints_offer_url = openstack_tf_output.get(
-                "keystone-endpoints-offer-url"
-            )
-            cert_distributor_offer_url = openstack_tf_output.get(
-                "cert-distributor-offer-url"
-            )
-            traefik_rgw_offer_url = openstack_tf_output.get("ingress-rgw-offer-url")
-
-            if keystone_endpoints_offer_url:
-                tfvars["keystone-endpoints-offer-url"] = keystone_endpoints_offer_url
-
-            if cert_distributor_offer_url:
-                tfvars["cert-distributor-offer-url"] = cert_distributor_offer_url
-
-            if traefik_rgw_offer_url:
-                tfvars["ingress-rgw-offer-url"] = traefik_rgw_offer_url
-
         return tfvars
 
 
-class AddMicrocephUnitsStep(AddMachineUnitsStep):
+class AddMicroOVNUnitsStep(AddMachineUnitsStep):
     """Add Microovn Unit."""
 
     def __init__(
@@ -202,7 +131,7 @@ class AddMicrocephUnitsStep(AddMachineUnitsStep):
         return MICROOVN_UNIT_TIMEOUT
 
 
-class RemoveMicrocephUnitsStep(RemoveMachineUnitsStep):
+class RemoveMicroOVNUnitsStep(RemoveMachineUnitsStep):
     """Remove Microovn Unit."""
 
     def __init__(
@@ -216,7 +145,7 @@ class RemoveMicrocephUnitsStep(RemoveMachineUnitsStep):
             APPLICATION,
             model,
             "Remove MicroOVN unit(s)",
-            "Removing MicroCeph unit(s) from machine",
+            "Removing MicroOVN unit(s) from machine",
         )
 
     def get_unit_timeout(self) -> int:
@@ -224,8 +153,9 @@ class RemoveMicrocephUnitsStep(RemoveMachineUnitsStep):
         return MICROOVN_UNIT_TIMEOUT
 
 
-class ConfigureMicrocephOSDStep(BaseStep):
-    """Configure Microceph OSD disks."""
+# TODO: Implement this step
+class ConfigureMicroOVNStep(BaseStep):
+    """Configure MicroOVN OSD disks."""
 
     _CONFIG = CONFIG_DISKS_KEY
 
@@ -406,187 +336,3 @@ class ConfigureMicrocephOSDStep(BaseStep):
             return Result(ResultType.FAILED, message)
 
         return Result(ResultType.COMPLETED)
-
-
-class SetCephMgrPoolSizeStep(BaseStep):
-    """Configure Microceph pool size for mgr."""
-
-    def __init__(self, client: Client, jhelper: JujuHelper, model: str):
-        super().__init__(
-            "Set Microceph mgr Pool size",
-            "Setting Microceph mgr pool size",
-        )
-        self.client = client
-        self.jhelper = jhelper
-        self.model = model
-        self.storage_nodes: list[dict] = []
-
-    def is_skip(self, status: Status | None = None) -> Result:
-        """Determines if the step should be skipped or not.
-
-        :return: ResultType.SKIPPED if the Step should be skipped,
-                ResultType.COMPLETED or ResultType.FAILED otherwise
-        """
-        self.storage_nodes = self.client.cluster.list_nodes_by_role("storage")
-        if len(self.storage_nodes):
-            return Result(ResultType.COMPLETED)
-
-        return Result(ResultType.SKIPPED)
-
-    def run(self, status: Status | None = None) -> Result:
-        """Set ceph mgr pool size."""
-        try:
-            pools = [
-                ".mgr",
-                ".rgw.root",
-                "default.rgw.log",
-                "default.rgw.control",
-                "default.rgw.meta",
-            ]
-            unit = self.jhelper.get_leader_unit(APPLICATION, self.model)
-            action_params = {
-                "pools": ",".join(pools),
-                "size": ceph_replica_scale(len(self.storage_nodes)),
-            }
-            LOG.debug(
-                f"Running microceph action set-pool-size with params {action_params}"
-            )
-            result = self.jhelper.run_action(
-                unit, self.model, "set-pool-size", action_params
-            )
-            if result.get("status") is None:
-                return Result(
-                    ResultType.FAILED,
-                    f"ERROR: Failed to update pool size for {pools}",
-                )
-        except (
-            ApplicationNotFoundException,
-            LeaderNotFoundException,
-            ActionFailedException,
-        ) as e:
-            LOG.debug(f"Failed to update pool size for {pools}", exc_info=True)
-            return Result(ResultType.FAILED, str(e))
-
-        return Result(ResultType.COMPLETED)
-
-
-class CheckMicrocephDistributionStep(BaseStep):
-    _APPLICATION = APPLICATION
-
-    def __init__(
-        self,
-        client: Client,
-        name: str,
-        jhelper: JujuHelper,
-        model: str,
-        force: bool = False,
-    ):
-        super().__init__(
-            "Check microceph distribution",
-            "Check if node is hosting units of microceph",
-        )
-        self.client = client
-        self.node = name
-        self.jhelper = jhelper
-        self.model = model
-        self.force = force
-
-    def is_skip(self, status: Status | None = None) -> Result:
-        """Determines if the step should be skipped or not.
-
-        :return: ResultType.SKIPPED if the Step should be skipped,
-                ResultType.COMPLETED or ResultType.FAILED otherwise
-        """
-        try:
-            node_info = self.client.cluster.get_node_info(self.node)
-        except NodeNotExistInClusterException:
-            return Result(ResultType.FAILED, f"Node {self.node} not found in cluster")
-        if Role.STORAGE.name.lower() not in node_info.get("role", ""):
-            LOG.debug("Node %s is not a storage node", self.node)
-            return Result(ResultType.SKIPPED)
-        try:
-            app = self.jhelper.get_application(self._APPLICATION, self.model)
-        except ApplicationNotFoundException:
-            LOG.debug("Failed to get application", exc_info=True)
-            return Result(
-                ResultType.SKIPPED,
-                f"Application {self._APPLICATION} has not been deployed yet",
-            )
-
-        for unit_name, unit in app.units.items():
-            if unit.machine == str(node_info.get("machineid")):
-                LOG.debug("Unit %s is running on node %s", unit_name, self.node)
-                break
-        else:
-            LOG.debug("No %s units found on %s", self._APPLICATION, self.node)
-            return Result(ResultType.SKIPPED)
-
-        nb_storage_nodes = len(self.client.cluster.list_nodes_by_role("storage"))
-        if nb_storage_nodes == 1 and not self.force:
-            return Result(
-                ResultType.FAILED,
-                "Cannot remove the last storage node,"
-                "--force to override, data loss will occur.",
-            )
-
-        replica_scale = ceph_replica_scale(nb_storage_nodes)
-
-        if nb_storage_nodes - 1 < replica_scale and not self.force:
-            return Result(
-                ResultType.FAILED,
-                "Cannot remove storage node, not enough storage nodes to maintain"
-                f" replica scale {replica_scale}, --force to override",
-            )
-
-        return Result(ResultType.COMPLETED)
-
-
-class DestroyMicrocephApplicationStep(DestroyMachineApplicationStep):
-    """Destroy Microceph application using Terraform."""
-
-    def __init__(
-        self,
-        client: Client,
-        tfhelper: TerraformHelper,
-        jhelper: JujuHelper,
-        manifest: Manifest,
-        model: str,
-    ):
-        super().__init__(
-            client,
-            tfhelper,
-            jhelper,
-            manifest,
-            CONFIG_KEY,
-            [APPLICATION],
-            model,
-            "Destroy MicroCeph",
-            "Destroying MicroCeph",
-        )
-
-    def get_application_timeout(self) -> int:
-        """Return application timeout in seconds."""
-        return MICROCEPH_APP_TIMEOUT
-
-    def run(self, status: Status | None = None) -> Result:
-        """Destroy microceph application."""
-        # note(gboutry):this is a workaround for
-        # https://github.com/juju/terraform-provider-juju/issues/473
-        try:
-            resources = self.tfhelper.state_list()
-        except TerraformException as e:
-            LOG.debug(f"Failed to list terraform state: {str(e)}")
-            return Result(ResultType.FAILED, "Failed to list terraform state")
-
-        for resource in resources:
-            if "integration" in resource:
-                try:
-                    self.tfhelper.state_rm(resource)
-                except TerraformException as e:
-                    LOG.debug(f"Failed to remove resource {resource}: {str(e)}")
-                    return Result(
-                        ResultType.FAILED,
-                        f"Failed to remove resource {resource} from state",
-                    )
-
-        return super().run(status)
