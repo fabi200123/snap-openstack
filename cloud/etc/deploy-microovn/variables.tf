@@ -34,3 +34,15 @@ variable "machine_model" {
   description = "Model to deploy to"
   type        = string
 }
+
+variable "tls_certificates_provider_name" {
+  description = "Name of the TLS certificates provider application"
+  type        = string
+  default     = "certificate-authority"
+}
+
+variable "ovsb_provider_name" {
+  description = "Name of the OVSB provider application"
+  type        = string
+  default     = "ovn-relay"
+}
