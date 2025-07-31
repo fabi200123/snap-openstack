@@ -30,9 +30,37 @@ resource "juju_application" "microovn" {
     revision = var.charm_microovn_revision
     base     = "ubuntu@24.04"
   }
-
 }
 
-output "ceph-application-name" {
+resource "juju_integration" "microovn-certificate-relation" {
+    count = (var.tls_certificates_provider_name != null) ? 1 : 0
+    model = var.machine_model
+
+    application {
+      name     = juju_application.microovn.name
+      endpoint = "tls-certificates"
+    }
+
+    application {
+      name = var.tls_certificates_provider_name
+      endpoint  = "certificates"
+    }
+}
+
+resource "juju_integration" "microovn-ovsdb-relation" {
+    model = var.machine_model
+    
+    application {
+        name     = juju_application.microovn.name
+        endpoint = "ovsdb"
+    }
+    
+    application {
+        name = var.ovsb_provider_name
+        endpoint  = "ovsdb-cms"
+    }
+}
+
+output "microovn-application-name" {
   value = juju_application.microovn.name
 }
