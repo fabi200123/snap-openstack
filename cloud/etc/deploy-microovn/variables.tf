@@ -35,14 +35,12 @@ variable "machine_model" {
   type        = string
 }
 
-variable "tls_certificates_provider_name" {
+variable "tls-certificates-offer-url" {
   description = "Name of the TLS certificates provider application"
   type        = string
-  default     = "certificate-authority"
 }
 
-variable "ovsb_provider_name" {
+variable "ovn-ovsdb-offer-url" {
   description = "Name of the OVSB provider application"
   type        = string
-  default     = "ovn-relay"
 }

@@ -33,7 +33,7 @@ resource "juju_application" "microovn" {
 }
 
 resource "juju_integration" "microovn-certificate-relation" {
-    count = (var.tls_certificates_provider_name != null) ? 1 : 0
+    count = (var.tls-certificates-offer-url != null) ? 1 : 0
     model = var.machine_model
 
     application {
@@ -42,12 +42,12 @@ resource "juju_integration" "microovn-certificate-relation" {
     }
 
     application {
-      name = var.tls_certificates_provider_name
-      endpoint  = "certificates"
+      offer_url = var.tls-certificates-offer-url
     }
 }
 
 resource "juju_integration" "microovn-ovsdb-relation" {
+    count = (var.ovn-ovsdb-offer-url != null) ? 1 : 0
     model = var.machine_model
     
     application {
@@ -56,8 +56,7 @@ resource "juju_integration" "microovn-ovsdb-relation" {
     }
     
     application {
-        name = var.ovsb_provider_name
-        endpoint  = "ovsdb-cms"
+        offer_url = var.ovn-ovsdb-offer-url
     }
 }
 
