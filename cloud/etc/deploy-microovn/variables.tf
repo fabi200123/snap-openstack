@@ -34,13 +34,3 @@ variable "machine_model" {
   description = "Model to deploy to"
   type        = string
 }
-
-variable "tls-certificates-offer-url" {
-  description = "Name of the TLS certificates provider application"
-  type        = string
-}
-
-variable "ovn-ovsdb-offer-url" {
-  description = "Name of the OVSB provider application"
-  type        = string
-}

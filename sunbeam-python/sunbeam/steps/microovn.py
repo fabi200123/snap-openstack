@@ -97,21 +97,6 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             "gateway_interface": "enp86s0"
         }
 
-        network_node = self.client.cluster.list_nodes_by_role("network")
-        if network_node:
-            openstack_tfhelper = self.deployment.get_tfhelper("openstack-plan")
-            openstack_tf_output = openstack_tfhelper.output()
-
-            tls_certificates_offer_url = openstack_tf_output.get(
-                "tls-certificates-offer-url"
-            )
-            ovn_ovsdb_offer_url = openstack_tf_output.get("ovn-ovsdb-offer-url")
-            
-            if tls_certificates_offer_url:
-                tfvars["tls-certificates-offer-url"] = tls_certificates_offer_url
-            if ovn_ovsdb_offer_url:
-                tfvars["ovn-ovsdb-offer-url"] = ovn_ovsdb_offer_url
-
         return tfvars
 
 

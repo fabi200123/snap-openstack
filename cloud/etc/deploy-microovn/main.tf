@@ -33,7 +33,7 @@ resource "juju_application" "microovn" {
 }
 
 resource "juju_integration" "microovn-certificate-relation" {
-    count = (var.tls-certificates-offer-url != null) ? 1 : 0
+    count = (var.ca-offer-url != null) ? 1 : 0
     model = var.machine_model
 
     application {
@@ -42,7 +42,7 @@ resource "juju_integration" "microovn-certificate-relation" {
     }
 
     application {
-      offer_url = var.tls-certificates-offer-url
+      offer_url = var.ca-offer-url
     }
 }
 
@@ -56,7 +56,7 @@ resource "juju_integration" "microovn-ovsdb-relation" {
     }
     
     application {
-        offer_url = var.ovn-ovsdb-offer-url
+        offer_url = var.ovn-relay-offer-url
     }
 }
 

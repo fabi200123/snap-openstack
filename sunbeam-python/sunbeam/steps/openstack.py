@@ -455,19 +455,6 @@ class DeployControlPlaneStep(BaseStep, JujuStepHelper):
 
         return tfvars
 
-    def get_network_tfvars(self, network_node: list[dict]) -> dict:
-        """Create terraform variables related to network."""
-        tfvars: dict[str, str | bool] = {}
-        if network_node:
-            model_with_owner = self.get_model_name_with_owner(self.machine_model)
-            tfvars["enable-microovn"] = True
-            tfvars["tls-certificates-offer-url"] = f"{model_with_owner}.certificate-authority"
-            tfvars["ovn-ovsdb-offer-url"] = f"{model_with_owner}.ovn-relay"
-        else:
-            tfvars["enable-microovn"] = False
-        
-        return tfvars
-
     def _get_database_resource_tfvars(
         self, service_scale: typing.Callable[[str], int]
     ) -> dict:
@@ -618,7 +605,6 @@ class DeployControlPlaneStep(BaseStep, JujuStepHelper):
         model_config.update({"workload-storage": K8SHelper.get_default_storageclass()})
         os_api_scale = compute_os_api_scale(self.topology, len(control_nodes))
         extra_tfvars = self.get_storage_tfvars(storage_nodes)
-        extra_tfvars.update(self.get_network_tfvars(network_nodes))
         extra_tfvars.update(self.get_region_tfvars())
         extra_tfvars.update(
             self.get_database_tfvars(
