@@ -47,7 +47,7 @@ resource "juju_integration" "microovn-certificate-relation" {
 }
 
 resource "juju_integration" "microovn-ovsdb-relation" {
-    count = (var.ovn-ovsdb-offer-url != null) ? 1 : 0
+    count = (var.ovn-relay-offer-url != null) ? 1 : 0
     model = var.machine_model
     
     application {

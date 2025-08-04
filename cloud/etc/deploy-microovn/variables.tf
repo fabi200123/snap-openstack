@@ -34,3 +34,15 @@ variable "machine_model" {
   description = "Model to deploy to"
   type        = string
 }
+
+variable "ovn-relay-offer-url" {
+  description = "Offer URL for OVN relay"
+  type        = string
+  default     = null
+}
+
+variable "ca-offer-url" {
+  description = "Offer URL for certificate authority"
+  type        = string
+  default     = null
+}
