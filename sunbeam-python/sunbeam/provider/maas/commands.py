@@ -815,6 +815,25 @@ def deploy(
             client, compute, jhelper, deployment.openstack_machines_model
         )
     )
+
+    plan2 += [
+        MaasConfigSRIOVStep(
+            deployment,
+            client,
+            jhelper,
+            deployment.openstack_machines_model,
+            manifest,
+            accept_defaults,
+        ),
+        ReapplyHypervisorTerraformPlanStep(
+            client,
+            tfhelper_hypervisor_deploy,
+            jhelper,
+            manifest,
+            model=deployment.openstack_machines_model,
+        ),
+    ]
+
     plan2.append(SetBootstrapped(client))
     run_plan(plan2, console, show_hints)
 
