@@ -43,9 +43,7 @@ CONFIG_KEY = "TerraformVarsMicroovnPlan"
 CONFIG_DISKS_KEY = "TerraformVarsMicroovn"
 APPLICATION = "microovn"
 MICROOVN_APP_TIMEOUT = 1200
-MICROOVN_UNIT_TIMEOUT = (
-    1200
-)
+MICROOVN_UNIT_TIMEOUT = 1200
 
 
 def microovn_questions():
@@ -61,7 +59,7 @@ def microovn_questions():
 
 
 class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
-    """Deploy Microovn application using Terraform."""
+    """Deploy MicroOVN application using Terraform."""
 
     def __init__(
         self,
@@ -82,7 +80,7 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             CONFIG_KEY,
             APPLICATION,
             model,
-            "Deploy Microovn",
+            "Deploy MicroOVN",
             "Deploying MicroOVN",
             refresh,
         )
@@ -98,18 +96,34 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             "gateway_interface": "enp86s0"
         }
 
-        if len(network_nodes):
+        if network_nodes:
+            # retrieve upstream offer URLs for CA, OVN relay, certificates, ovsdb-cms
             openstack_tfhelper = self.deployment.get_tfhelper("openstack-plan")
             openstack_tf_output = openstack_tfhelper.output()
-            ca_offer_url = openstack_tf_output.get("ca-offer-url")
-            ovn_relay_offer_url = openstack_tf_output.get("ovn-relay-offer-url")
 
-            if ca_offer_url:
-                tfvars["ca-offer-url"] = ca_offer_url
-            if ovn_relay_offer_url:
-                tfvars["ovn-relay-offer-url"] = ovn_relay_offer_url
+            juju_offers = {
+                "ca-offer-url",
+                "ovn-relay-offer-url",
+                "cert-distributor-offer-url",
+                "ovsdb-cms-offer-url",
+            }
+            for offer in juju_offers:
+                if url := openstack_tf_output.get(offer):
+                    tfvars[offer] = url
 
         return tfvars
+
+
+class ReapplyMicroOVNOptionalIntegrationsStep(DeployMicroOVNApplicationStep):
+    """Reapply MicroOVN optional integrations using Terraform."""
+
+    def tf_apply_extra_args(self) -> list[str]:
+        """Extra args for terraform apply to reapply only optional CMR integrations."""
+        return [
+            "-target=juju_integration.microovn-cert-distributor",
+            "-target=juju_integration.microovn-certs",
+            "-target=juju_integration.microovn-ovsdb-cms",
+        ]
 
 
 class AddMicroOVNUnitsStep(AddMachineUnitsStep):
@@ -164,182 +178,3 @@ class RemoveMicroOVNUnitsStep(RemoveMachineUnitsStep):
 class ConfigureMicroOVNStep(BaseStep):
     """Configure MicroOVN OSD disks."""
 
-    _CONFIG = CONFIG_DISKS_KEY
-
-    def __init__(
-        self,
-        client: Client,
-        name: str,
-        jhelper: JujuHelper,
-        model: str,
-        manifest: Manifest | None = None,
-        accept_defaults: bool = False,
-    ):
-        super().__init__("Configure MicroCeph storage", "Configuring MicroCeph storage")
-        self.client = client
-        self.node_name = name
-        self.jhelper = jhelper
-        self.model = model
-        self.manifest = manifest
-        self.accept_defaults = accept_defaults
-        self.variables: dict = {}
-        self.machine_id = ""
-        self.disks = ""
-        self.unpartitioned_disks: list[str] = []
-        self.osd_disks: list[str] = []
-
-    def microceph_config_questions(self):
-        """Return questions for configuring microceph."""
-        disks_str = None
-        if len(self.unpartitioned_disks) > 0:
-            disks_str = ",".join(self.unpartitioned_disks)
-
-        questions = microovn_questions()
-        # Specialise question with local disk information.
-        questions["osd_devices"].default_value = disks_str
-        return questions
-
-    def get_all_disks(self) -> None:
-        """Get all disks from microceph unit."""
-        try:
-            node = self.client.cluster.get_node_info(self.node_name)
-            self.machine_id = str(node.get("machineid"))
-            unit = self.jhelper.get_unit_from_machine(
-                APPLICATION, self.machine_id, self.model
-            )
-            osd_disks_dict, unpartitioned_disks_dict = list_disks(
-                self.jhelper, self.model, unit
-            )
-            self.unpartitioned_disks = [
-                disk.get("path") for disk in unpartitioned_disks_dict
-            ]
-            self.osd_disks = [disk.get("path") for disk in osd_disks_dict]
-            LOG.debug(f"Unpartitioned disks: {self.unpartitioned_disks}")
-            LOG.debug(f"OSD disks: {self.osd_disks}")
-
-        except (UnitNotFoundException, ActionFailedException) as e:
-            LOG.debug(str(e))
-            raise SunbeamException("Unable to list disks")
-
-    def prompt(
-        self,
-        console: Console | None = None,
-        display_question_description: bool = False,
-    ) -> None:
-        """Determines if the step can take input from the user.
-
-        Prompts are used by Steps to gather the necessary input prior to
-        running the step. Steps should not expect that the prompt will be
-        available and should provide a reasonable default where possible.
-        """
-        self.get_all_disks()
-        self.variables = questions.load_answers(self.client, self._CONFIG)
-        self.variables.setdefault("microceph_config", {})
-        self.variables["microceph_config"].setdefault(
-            self.node_name, {"osd_devices": None}
-        )
-
-        # Set defaults
-        if self.manifest and self.manifest.core.config.microceph_config:
-            microceph_config = self.manifest.core.config.model_dump(by_alias=True)[
-                "microceph_config"
-            ]
-        else:
-            microceph_config = {}
-        microceph_config.setdefault(self.node_name, {"osd_devices": None})
-
-        # Preseed can have osd_devices as list. If so, change to comma separated str
-        osd_devices = microceph_config.get(self.node_name, {}).get("osd_devices")
-        if isinstance(osd_devices, list):
-            osd_devices_str = ",".join(osd_devices)
-            microceph_config[self.node_name]["osd_devices"] = osd_devices_str
-
-        microceph_config_bank = questions.QuestionBank(
-            questions=self.microceph_config_questions(),
-            console=console,  # type: ignore
-            preseed=microceph_config.get(self.node_name),
-            previous_answers=self.variables.get("microceph_config", {}).get(
-                self.node_name
-            ),
-            accept_defaults=self.accept_defaults,
-            show_hint=display_question_description,
-        )
-        # Microceph configuration
-        self.disks = microceph_config_bank.osd_devices.ask()
-        self.variables["microceph_config"][self.node_name]["osd_devices"] = self.disks
-
-        LOG.debug(self.variables)
-        questions.write_answers(self.client, self._CONFIG, self.variables)
-
-    def has_prompts(self) -> bool:
-        """Returns true if the step has prompts that it can ask the user.
-
-        :return: True if the step can ask the user for prompts,
-                 False otherwise
-        """
-        return True
-
-    def is_skip(self, status: Status | None = None) -> Result:
-        """Determines if the step should be skipped or not.
-
-        :return: ResultType.SKIPPED if the Step should be skipped,
-                ResultType.COMPLETED or ResultType.FAILED otherwise
-        """
-        if not self.disks:
-            LOG.debug(
-                "Skipping ConfigureMicrocephOSDStep as no osd devices are selected"
-            )
-            return Result(ResultType.SKIPPED)
-
-        # Remove any disks that are already added
-        disks_to_add = set(self.disks.split(",")).difference(self.osd_disks)
-        self.disks = ",".join(disks_to_add)
-        if not self.disks:
-            LOG.debug("Skipping ConfigureMicrocephOSDStep as devices are already added")
-            return Result(ResultType.SKIPPED)
-
-        return Result(ResultType.COMPLETED)
-
-    def run(self, status: Status | None = None) -> Result:
-        """Configure local disks on microceph."""
-        failed = False
-        try:
-            unit = self.jhelper.get_unit_from_machine(
-                APPLICATION, self.machine_id, self.model
-            )
-            LOG.debug(f"Running action add-osd on {unit}")
-            action_result = self.jhelper.run_action(
-                unit,
-                self.model,
-                "add-osd",
-                action_params={
-                    "device-id": self.disks,
-                },
-            )
-            LOG.debug(f"Result after running action add-osd: {action_result}")
-        except UnitNotFoundException as e:
-            message = f"Microceph Adding disks {self.disks} failed: {str(e)}"
-            failed = True
-        except ActionFailedException as e:
-            message = f"Microceph Adding disks {self.disks} failed: {str(e)}"
-            LOG.debug(message)
-            try:
-                error = ast.literal_eval(str(e))
-                results = ast.literal_eval(error.get("result"))
-                for result in results:
-                    if result.get("status") == "failure":
-                        # disk already added to microceph, ignore the error
-                        if "entry already exists" in result.get("message"):
-                            disk = result.get("spec")
-                            LOG.debug(f"Disk {disk} already added")
-                            continue
-                        else:
-                            failed = True
-            except Exception as ex:
-                LOG.debug(f"Exception in eval action output: {str(ex)}")
-                return Result(ResultType.FAILED, message)
-
-        if failed:
-            return Result(ResultType.FAILED, message)
-
-        return Result(ResultType.COMPLETED)
