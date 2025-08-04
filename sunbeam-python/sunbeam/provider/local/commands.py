@@ -1208,6 +1208,7 @@ def join(
     openstack_tfhelper = deployment.get_tfhelper("openstack-plan")
     hypervisor_tfhelper = deployment.get_tfhelper("hypervisor-plan")
     plan4.append(TerraformInitStep(openstack_tfhelper))
+    plan4.append(TerraformInitStep(hypervisor_tfhelper))
     if is_storage_node:
         plan4.append(
             AddMicrocephUnitsStep(
@@ -1278,8 +1279,6 @@ def join(
                 )
             )
 
-        hypervisor_tfhelper = deployment.get_tfhelper("hypervisor-plan")
-        plan4.append(TerraformInitStep(hypervisor_tfhelper))
         plan4.append(
             ReapplyHypervisorOptionalIntegrationsStep(
                 deployment,
