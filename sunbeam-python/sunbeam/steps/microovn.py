@@ -93,9 +93,21 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
 
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
+        network_nodes = self.client.cluster.list_nodes_by_role("network")
         tfvars: dict[str, Any] = {
             "gateway_interface": "enp86s0"
         }
+
+        if len(network_nodes):
+            openstack_tfhelper = self.deployment.get_tfhelper("openstack-plan")
+            openstack_tf_output = openstack_tfhelper.output()
+            ca_offer_url = openstack_tf_output.get("ca-offer-url")
+            ovn_relay_offer_url = openstack_tf_output.get("ovn-relay-offer-url")
+
+            if ca_offer_url:
+                tfvars["ca-offer-url"] = ca_offer_url
+            if ovn_relay_offer_url:
+                tfvars["ovn-relay-offer-url"] = ovn_relay_offer_url
 
         return tfvars
 
