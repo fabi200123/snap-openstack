@@ -22,6 +22,7 @@ from sunbeam.provider.local.steps import LocalClusterStatusStep
 from sunbeam.provider.maas.steps import MaasClusterStatusStep
 from sunbeam.steps.cluster_status import ClusterStatusStep
 from sunbeam.steps.hypervisor import EnableHypervisorStep
+from sunbeam.steps.microovn import EnableMicroOVNStep
 from sunbeam.steps.maintenance import (
     CordonControlRoleNodeStep,
     DrainControlRoleNodeStep,
@@ -223,6 +224,8 @@ class OperationViewer:
             elif name == CordonControlRoleNodeStep.__name__:
                 self.update_step_result(result.message["id"], result)
             elif name == UncordonControlRoleNodeStep.__name__:
+                self.update_step_result(result.message["id"], result)
+            elif name == EnableMicroOVNStep.__name__:
                 self.update_step_result(result.message["id"], result)
         console.print(self._operation_result)
         if failed_result is not None and failed_result_name is not None:
