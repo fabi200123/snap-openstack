@@ -801,6 +801,9 @@ def bootstrap(
         )
     )
 
+    openstack_tfhelper = deployment.get_tfhelper("openstack-plan")
+    plan1.append(TerraformInitStep(openstack_tfhelper))
+
     # Deploy MicroOVN application during bootstrap irrespective of node role.
     microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
     plan1.append(TerraformInitStep(microovn_tfhelper))
@@ -815,9 +818,6 @@ def bootstrap(
             deployment.openstack_machines_model,
         )
     )
-
-    openstack_tfhelper = deployment.get_tfhelper("openstack-plan")
-    plan1.append(TerraformInitStep(openstack_tfhelper))
 
     if is_network_node:
         plan1.append(
