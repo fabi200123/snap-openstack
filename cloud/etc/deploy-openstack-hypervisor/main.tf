@@ -78,7 +78,7 @@ resource "juju_integration" "hypervisor-cert-distributor" {
 }
 
 resource "juju_integration" "hypervisor-certs" {
-  count = (var.ca-offer-url != null) ? 1 : 0
+  count = (var.ca-offer-url != null) ? 0 : 1
   model = var.machine_model
 
   application {
@@ -100,7 +100,7 @@ resource "juju_integration" "hypervisor-ovn" {
   }
 
   application {
-    offer_url = var.ovn-relay-offer-url
+    offer_url = "url://ovn-relay-offer-url"
   }
 }
 
