@@ -160,6 +160,7 @@ from sunbeam.steps.microceph import (
 )
 from sunbeam.steps.microovn import (
     AddMicroOVNUnitsStep,
+    ConfigureMicroOVNStep,
     DeployMicroOVNApplicationStep,
 )
 from sunbeam.steps.openstack import (
@@ -1345,6 +1346,17 @@ def join(
                 client, name, jhelper, deployment.openstack_machines_model
             )
         )
+        plan4.append(
+            ConfigureMicroOVNStep(
+                client,
+                name,
+                jhelper,
+                deployment.openstack_machines_model,
+                accept_defaults=accept_defaults,
+                manifest=manifest,
+            )
+        )
+
     if is_storage_node:
         plan4.append(
             AddMicrocephUnitsStep(

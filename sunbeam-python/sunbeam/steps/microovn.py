@@ -69,11 +69,13 @@ def microovn_questions():
 class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
     """Deploy MicroOVN application using Terraform."""
 
+
     def __init__(
         self,
         deployment: Deployment,
         client: Client,
         tfhelper: TerraformHelper,
+        openstack_tfhelper: TerraformHelper,
         jhelper: JujuHelper,
         manifest: Manifest,
         model: str,
@@ -88,9 +90,9 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             CONFIG_KEY,
             APPLICATION,
             model,
-            "Deploy MicroOVN",
-            "Deploying MicroOVN",
-            refresh,
+            "Deploy OpenStack Hypervisor",
+            "Deploying OpenStack Hypervisor",
+            refresh=refresh,
         )
 
     def get_application_timeout(self) -> int:

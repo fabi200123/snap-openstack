@@ -541,6 +541,8 @@ class DisableMaintenance(MaintenanceCommand):
             self.ops_viewer.add_uncordon_control_role_step(
                 result=uncordon_k8s_node_dry_run_result
             )
+        if "network" in node_status:
+            self.ops_viewer.add_step(step_name=EnableHypervisorStep.__name__)
 
         console.print(self.ops_viewer.dry_run_message)
 
