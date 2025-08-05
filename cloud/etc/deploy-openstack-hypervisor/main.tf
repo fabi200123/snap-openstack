@@ -100,7 +100,7 @@ resource "juju_integration" "hypervisor-ovn" {
   }
 
   application {
-    offer_url = "url://ovn-relay-offer-url"
+    offer_url = var.ovn-relay-offer-url
   }
 }
 
