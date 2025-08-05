@@ -809,6 +809,7 @@ def bootstrap(
             deployment,
             client,
             microovn_tfhelper,
+            openstack_tfhelper,
             jhelper,
             manifest,
             deployment.openstack_machines_model,

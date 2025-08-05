@@ -94,6 +94,8 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             "Deploying OpenStack Hypervisor",
             refresh=refresh,
         )
+        self.openstack_tfhelper = openstack_tfhelper
+        self.openstack_model = OPENSTACK_MODEL
 
     def get_application_timeout(self) -> int:
         """Return application timeout in seconds."""
