@@ -58,3 +58,15 @@ variable "ca-offer-url" {
   type        = string
   default     = null
 }
+
+variable "cert-distributor-offer-url" {
+  description = "Offer URL for certificate distributor"
+  type        = string
+  default     = null
+}
+
+variable "ovsdb-cms-offer-url" {
+  description = "Offer URL for OVN OVSDB CMS"
+  type        = string
+  default     = null
+}
