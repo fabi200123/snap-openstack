@@ -28,7 +28,7 @@ resource "juju_application" "microovn" {
   }
 
   config = merge({
-    snap-channel = var.snap_channel
+    snap-channel = "latest/edge"
   }, var.charm_microovn_config)
   endpoint_bindings = var.endpoint_bindings
 }
