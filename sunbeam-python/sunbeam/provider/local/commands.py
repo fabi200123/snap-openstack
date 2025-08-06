@@ -162,6 +162,7 @@ from sunbeam.steps.microovn import (
     AddMicroOVNUnitsStep,
     ConfigureMicroOVNStep,
     DeployMicroOVNApplicationStep,
+    ReapplyMicroOVNOptionalIntegrationsStep,
     RemoveMicroOVNUnitsStep,
 )
 from sunbeam.steps.openstack import (
@@ -826,6 +827,18 @@ def bootstrap(
                 client, fqdn, jhelper, deployment.openstack_machines_model
             )
         )
+        plan1.append(
+            ReapplyMicroOVNOptionalIntegrationsStep(
+                deployment,
+                client,
+                microovn_tfhelper,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+                refresh=True,
+            )
+        )
 
     if is_storage_node:
         plan1.append(
@@ -949,6 +962,7 @@ def bootstrap(
         )
     
     if is_network_node:
+        microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
         plan2.append(
             DeployMicroOVNApplicationStep(
                 deployment,
@@ -963,6 +977,18 @@ def bootstrap(
         plan2.append(
             AddMicroOVNUnitsStep(
                 client, fqdn, jhelper, deployment.openstack_machines_model
+            )
+        )
+        plan2.append(
+            ReapplyMicroOVNOptionalIntegrationsStep(
+                deployment,
+                client,
+                microovn_tfhelper,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+                refresh=True,
             )
         )
 
@@ -1385,6 +1411,18 @@ def join(
             plan4.append(
                 AddMicroOVNUnitsStep(
                     client, name, jhelper, deployment.openstack_machines_model
+                )
+            )
+            plan4.append(
+                ReapplyMicroOVNOptionalIntegrationsStep(
+                    deployment,
+                    client,
+                    microovn_tfhelper,
+                    openstack_tfhelper,
+                    jhelper,
+                    manifest,
+                    deployment.openstack_machines_model,
+                    refresh=True,
                 )
             )
 
