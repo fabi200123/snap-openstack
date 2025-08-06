@@ -90,8 +90,8 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             CONFIG_KEY,
             APPLICATION,
             model,
-            "Deploy OpenStack Hypervisor",
-            "Deploying OpenStack Hypervisor",
+            "Deploy OpenStack microovn",
+            "Deploying OpenStack microovn",
             refresh=refresh,
         )
         self.openstack_tfhelper = openstack_tfhelper
@@ -118,14 +118,27 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
 
         extra_tfvars.update(
             {
+                "openstack_model": self.openstack_model,
                 "endpoint_bindings": [
                     {"space": self.deployment.get_space(Networks.MANAGEMENT)},
+                    {
+                        "endpoint": "certificates",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "ovsdb-cms",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
                     {
                         "endpoint": "tls-certificates",
                         "space": self.deployment.get_space(Networks.INTERNAL),
                     },
                     {
                         "endpoint": "ovsdb-cms",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "receive-ca-cert",
                         "space": self.deployment.get_space(Networks.INTERNAL),
                     },
                 ],
@@ -278,7 +291,7 @@ class RemoveMicroOVNUnitsStep(BaseStep, JujuStepHelper):
             remove_hypervisor(self.node_name, self.jhelper)
         except openstack.exceptions.SDKException as e:
             LOG.error(
-                "Encountered error removing hypervisor references from control plane."
+                "Encountered error removing microovn references from control plane."
             )
             if self.force:
                 LOG.warning("Force mode set, ignoring exception:")
@@ -332,7 +345,7 @@ class EnableMicroOVNStep(BaseStep, JujuStepHelper):
         except ApplicationNotFoundException as e:
             LOG.debug(str(e))
             return Result(
-                ResultType.SKIPPED, "Hypervisor application has not been deployed yet"
+                ResultType.SKIPPED, "microovn application has not been deployed yet"
             )
 
         for unit_name, unit in application.units.items():
