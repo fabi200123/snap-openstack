@@ -116,30 +116,11 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
         extra_tfvars = {offer: openstack_tf_output.get(offer) for offer in juju_offers}
 
 
-        extra_tfvars.update(
-            {
-                "openstack_model": self.openstack_model,
-                "endpoint_bindings": [
-                    {"space": self.deployment.get_space(Networks.MANAGEMENT)},
-                    {
-                        "endpoint": "certificates",
-                        "space": self.deployment.get_space(Networks.MANAGEMENT),
-                    },
-                    {
-                        "endpoint": "ovsdb-cms",
-                        "space": self.deployment.get_space(Networks.MANAGEMENT),
-                    },
-                    {
-                        "endpoint": "tls-certificates",
-                        "space": self.deployment.get_space(Networks.MANAGEMENT),
-                    },
-                    {
-                        "endpoint": "receive-ca-cert",
-                        "space": self.deployment.get_space(Networks.MANAGEMENT),
-                    },
-                ],
-            }
-        )
+        extra_tfvars["endpoint_bindings"] = [
+            { "endpoint": "cluster",          "space": self.deployment.get_space(Networks.INTERNAL) },
+            { "endpoint": "tls-certificates", "space": self.deployment.get_space(Networks.INTERNAL) },
+            { "endpoint": "ovsdb-cms",         "space": self.deployment.get_space(Networks.INTERNAL) },
+        ]
         return extra_tfvars
 
 
