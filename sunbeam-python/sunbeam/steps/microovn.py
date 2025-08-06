@@ -303,8 +303,33 @@ class RemoveMicroOVNUnitsStep(BaseStep, JujuStepHelper):
 
 
 # TODO: Implement this step
-class ConfigureMicroOVNStep(BaseStep):
-    """Configure MicroOVN OSD disks."""
+class ConfigureMicroOVNStep(BaseStep, JujuStepHelper):
+    """Ask for and apply MicroOVN disk configuration."""
+
+    def __init__(
+        self,
+        client,
+        node: str,
+        jhelper,
+        model: str,
+        accept_defaults: bool = False,
+        manifest=None,
+    ):
+        super().__init__(
+            "Configure MicroOVN",
+            "Configuring MicroOVN charm settings"
+        )
+        self.client = client
+        self.node = node
+        self.jhelper = jhelper
+        self.model = model
+        self.accept_defaults = accept_defaults
+
+    def is_skip(self, status=None) -> Result:
+        return Result(ResultType.COMPLETED)
+
+    def run(self, status=None) -> Result:
+        return Result(ResultType.COMPLETED)
 
 class EnableMicroOVNStep(BaseStep, JujuStepHelper):
     """Enable MicroOVN service."""

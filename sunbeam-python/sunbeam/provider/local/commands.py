@@ -1361,32 +1361,32 @@ def join(
     plan4.append(TerraformInitStep(openstack_tfhelper))
     plan4.append(TerraformInitStep(hypervisor_tfhelper))
     if is_network_node:
-        plan4.append(
-            AddMicroOVNUnitsStep(
-                client, name, jhelper, deployment.openstack_machines_model
+            plan4.append(
+                DeployMicroOVNApplicationStep(
+                    deployment,
+                    client,
+                    deployment.get_tfhelper("microovn-plan"),
+                    openstack_tfhelper,
+                    jhelper,
+                    manifest,
+                    deployment.openstack_machines_model,
+                )
             )
-        )
-        plan4.append(
-            ConfigureMicroOVNStep(
-                client,
-                name,
-                jhelper,
-                deployment.openstack_machines_model,
-                accept_defaults=accept_defaults,
-                manifest=manifest,
+            plan4.append(
+                ConfigureMicroOVNStep(
+                    client,
+                    name,
+                    jhelper,
+                    deployment.openstack_machines_model,
+                    accept_defaults=accept_defaults,
+                    manifest=manifest,
+                )
             )
-        )
-        plan4.append(
-            DeployMicroOVNApplicationStep(
-                deployment,
-                client,
-                deployment.get_tfhelper("microovn-plan"),
-                openstack_tfhelper,
-                jhelper,
-                manifest,
-                deployment.openstack_machines_model,
+            plan4.append(
+                AddMicroOVNUnitsStep(
+                    client, name, jhelper, deployment.openstack_machines_model
+                )
             )
-        )
 
     if is_storage_node:
         plan4.append(
