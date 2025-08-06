@@ -121,7 +121,7 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
                 "endpoint_bindings": [
                     {"space": self.deployment.get_space(Networks.MANAGEMENT)},
                     {
-                        "endpoint": "certificates",
+                        "endpoint": "tls-certificates",
                         "space": self.deployment.get_space(Networks.INTERNAL),
                     },
                     {
