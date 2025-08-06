@@ -2220,21 +2220,12 @@ class MaasConfigSRIOVStep(BaseStep):
         excluded_devices: dict[str, list] = {}
 
         if self.manifest:
-            if (
-                self.manifest.core.config.pci
-                and self.manifest.core.config.pci.device_specs
-            ):
-                pci_whitelist = copy.deepcopy(
-                    self.manifest.core.config.pci.device_specs
-                )
+            pci_config = self.manifest.core.config.pci
+            if pci_config and pci_config.device_specs:
+                pci_whitelist = copy.deepcopy(pci_config.device_specs)
                 LOG.debug("PCI whitelist from manifest: %s", pci_whitelist)
-            if (
-                self.manifest.core.config.pci
-                and self.manifest.core.config.pci.excluded_devices
-            ):
-                excluded_devices = copy.deepcopy(
-                    self.manifest.core.config.pci.excluded_devices
-                )
+            if pci_config and pci_config.excluded_devices:
+                excluded_devices = copy.deepcopy(pci_config.excluded_devices)
                 LOG.debug("PCI exclude list from manifest: %s", excluded_devices)
 
         for machine in compute_machines:
@@ -2263,9 +2254,7 @@ class MaasConfigSRIOVStep(BaseStep):
                     )
                 else:
                     # Add to the per-node exclusion list.
-                    nic_utils.exclude_sriov_nic(
-                        node_name, snap_nic, excluded_devices
-                    )
+                    nic_utils.exclude_sriov_nic(node_name, snap_nic, excluded_devices)
 
         return pci_whitelist, excluded_devices
 
