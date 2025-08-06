@@ -336,22 +336,16 @@ class LocalConfigSRIOVStep(BaseStep):
         if self.node_name not in excluded_devices:
             excluded_devices[self.node_name] = []
 
-        if self.accept_defaults and self.manifest:
-            LOG.info(
-                "Received '--accept-defaults' and a manifest, ignoring previous "
-                "answers and applying the manifest configuration."
-            )
-        else:
-            for device_spec in previous_pci_whitelist:
-                if device_spec not in pci_whitelist:
-                    pci_whitelist.append(device_spec)
-            for node in previous_excluded_devices:
-                if node not in excluded_devices:
-                    excluded_devices[node] = previous_excluded_devices[node]
-                else:
-                    for excluded_device in previous_excluded_devices[node]:
-                        if excluded_device not in excluded_devices[node]:
-                            excluded_devices[node].append(excluded_device)
+        for device_spec in previous_pci_whitelist:
+            if device_spec not in pci_whitelist:
+                pci_whitelist.append(device_spec)
+        for node in previous_excluded_devices:
+            if node not in excluded_devices:
+                excluded_devices[node] = previous_excluded_devices[node]
+            else:
+                for excluded_device in previous_excluded_devices[node]:
+                    if excluded_device not in excluded_devices[node]:
+                        excluded_devices[node].append(excluded_device)
 
         if not self.accept_defaults:
             self._do_prompt(pci_whitelist, excluded_devices, show_hint)

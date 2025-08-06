@@ -360,8 +360,8 @@ class TestLocalConfigSRIOVStep:
                     "maas0.local": ["0000:0:0.2"],
                 },
             ),
-            # --accept-defaults was passed, so the previous answers are ignored and
-            # the manifest specs are applied as-is, without prompting the user.
+            # --accept-defaults was passed, we're still preserving the
+            # previous values.
             (
                 # Previous answers
                 {
@@ -409,10 +409,17 @@ class TestLocalConfigSRIOVStep:
                         }
                     },
                     {"address": ":2a:", "physical_network": "physnet2"},
+                    {
+                        "vendor_id": "0001",
+                        "product_id": "0001",
+                        "address": "0000:0:0.1",
+                        "physical_network": "physnet1",
+                    },
                 ],
                 # Expected excluded devices
                 {
                     "maas0.local": ["0000:2a:0.2"],
+                    "other-node": ["0000:0:0.2"],
                 },
             ),
         ],
