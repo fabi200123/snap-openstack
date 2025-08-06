@@ -14,14 +14,10 @@ terraform {
 
 provider "juju" {}
 
-data "juju_model" "machine_model" {
-  name = var.machine_model
-}
-
 resource "juju_application" "microovn" {
   name  = "microovn"
   trust = true
-  model = data.juju_model.machine_model.name
+  model = var.machine_model
   units = length(var.machine_ids)
 
   charm {
@@ -30,6 +26,11 @@ resource "juju_application" "microovn" {
     revision = var.charm_microovn_revision
     base     = "ubuntu@24.04"
   }
+
+  config = merge({
+    snap-channel = var.snap_channel
+  }, var.charm_microovn_config)
+  endpoint_bindings = var.endpoint_bindings
 }
 
 resource "juju_integration" "microovn-certificate-relation" {
