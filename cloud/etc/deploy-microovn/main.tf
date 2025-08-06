@@ -74,19 +74,6 @@ resource "juju_integration" "microovn-certs" {
   }
 }
 
-resource "juju_integration" "microovn-ovsdb-cms" {
-  count = var.ovsdb-cms-offer-url != "" ? 1 : 0
-  model = var.machine_model
-
-  application {
-    name     = juju_application.microovn.name
-    endpoint = "ovsdb-cms"
-  }
-  application {
-    offer_url = var.ovsdb-cms-offer-url
-  }
-}
-
 output "microovn-application-name" {
   value = juju_application.microovn.name
 }
