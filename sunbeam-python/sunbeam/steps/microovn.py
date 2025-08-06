@@ -123,19 +123,19 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
                     {"space": self.deployment.get_space(Networks.MANAGEMENT)},
                     {
                         "endpoint": "certificates",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
                     {
                         "endpoint": "ovsdb-cms",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
                     {
                         "endpoint": "tls-certificates",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
                     {
                         "endpoint": "receive-ca-cert",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
                 ],
             }
