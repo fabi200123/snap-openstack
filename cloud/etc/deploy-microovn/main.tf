@@ -53,7 +53,7 @@ resource "juju_integration" "microovn-ovsdb-relation" {
     
     application {
         name     = juju_application.microovn.name
-        endpoint = "ovsdb-cms"
+        endpoint = "ovsdb"
     }
     
     application {
