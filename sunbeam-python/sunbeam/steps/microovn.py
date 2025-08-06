@@ -134,10 +134,6 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
                         "space": self.deployment.get_space(Networks.INTERNAL),
                     },
                     {
-                        "endpoint": "ovsdb-cms",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
                         "endpoint": "receive-ca-cert",
                         "space": self.deployment.get_space(Networks.INTERNAL),
                     },
