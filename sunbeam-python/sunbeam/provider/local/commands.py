@@ -162,6 +162,7 @@ from sunbeam.steps.microovn import (
     AddMicroOVNUnitsStep,
     ConfigureMicroOVNStep,
     DeployMicroOVNApplicationStep,
+    RemoveMicroOVNUnitsStep,
 )
 from sunbeam.steps.openstack import (
     DeployControlPlaneStep,
@@ -946,6 +947,24 @@ def bootstrap(
                 ),
             ]
         )
+    
+    if is_network_node:
+        plan2.append(
+            DeployMicroOVNApplicationStep(
+                deployment,
+                client,
+                microovn_tfhelper,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+            )
+        )
+        plan2.append(
+            AddMicroOVNUnitsStep(
+                client, fqdn, jhelper, deployment.openstack_machines_model
+            )
+        )
 
     plan2.append(SetBootstrapped(client))
     run_plan(plan2, console, show_hints)
@@ -1357,6 +1376,17 @@ def join(
                 manifest=manifest,
             )
         )
+        plan4.append(
+            DeployMicroOVNApplicationStep(
+                deployment,
+                client,
+                deployment.get_tfhelper("microovn-plan"),
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+            )
+        )
 
     if is_storage_node:
         plan4.append(
@@ -1591,6 +1621,9 @@ def remove(ctx: click.Context, name: str, force: bool, show_hints: bool) -> None
             client, name, jhelper, deployment.openstack_machines_model
         ),
         RemoveMicrocephUnitsStep(
+            client, name, jhelper, deployment.openstack_machines_model
+        ),
+        RemoveMicroOVNUnitsStep(
             client, name, jhelper, deployment.openstack_machines_model
         ),
         CordonK8SUnitStep(client, name, jhelper, deployment.openstack_machines_model),
