@@ -143,6 +143,7 @@ from sunbeam.steps.k8s import (
     EnsureL2AdvertisementByHostStep,
     MigrateK8SKubeconfigStep,
     PatchCoreDNSStep,
+    PatchServiceExternalTrafficStep,
     RemoveK8SUnitsStep,
     StoreK8SKubeConfigStep,
     UpdateK8SCloudStep,
@@ -474,6 +475,13 @@ def get_juju_bootstrap_plans(
             deployment.controller,
             bootstrap_args=bootstrap_args,
             proxy_settings=proxy_settings,
+        ),
+        # note(gboutry): workaround for LP#2111922
+        # Find more permanent solution when juju supports HA on k8s
+        PatchServiceExternalTrafficStep(
+            deployment,
+            "controller-service",
+            "controller-" + deployment.controller,
         ),
     ]
 
