@@ -2264,7 +2264,7 @@ class MaasConfigSRIOVStep(BaseStep):
                 else:
                     # Add to the per-node exclusion list.
                     nic_utils.exclude_sriov_nic(
-                        node_name, snap_nic, pci_whitelist, excluded_devices
+                        node_name, snap_nic, excluded_devices
                     )
 
         return pci_whitelist, excluded_devices

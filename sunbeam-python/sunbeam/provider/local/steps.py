@@ -450,7 +450,7 @@ class LocalConfigSRIOVStep(BaseStep):
                     ).ask()
                     if not should_whitelist:
                         nic_utils.exclude_sriov_nic(
-                            self.node_name, nic, pci_whitelist, excluded_devices
+                            self.node_name, nic, excluded_devices
                         )
                         continue
 

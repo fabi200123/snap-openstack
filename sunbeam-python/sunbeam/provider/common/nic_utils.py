@@ -100,7 +100,6 @@ def whitelist_sriov_nic(
 def exclude_sriov_nic(
     node_name: str,
     nic: dict,
-    pci_whitelist: list[dict],
     excluded_devices: dict[str, list],
 ):
     LOG.debug("Excluding SR-IOV nic: %s", nic["name"])
