@@ -104,23 +104,71 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
         # retrieve upstream offer URLs for CA, OVN relay, certificates, ovsdb-cms
-        openstack_tfhelper = self.deployment.get_tfhelper("openstack-plan")
-        openstack_tf_output = openstack_tfhelper.output()
+        openstack_tf_output = self.openstack_tfhelper.output()
 
         juju_offers = {
+            "rabbitmq-offer-url",
+            "keystone-offer-url",
+            "cert-distributor-offer-url",
             "ca-offer-url",
             "ovn-relay-offer-url",
-            "cert-distributor-offer-url",
-            "ovsdb-cms-offer-url",
+            "nova-offer-url",
         }
         extra_tfvars = {offer: openstack_tf_output.get(offer) for offer in juju_offers}
 
+        extra_tfvars.update(
+            {
+                "openstack_model": self.openstack_model,
+                "endpoint_bindings": [
+                    {"space": self.deployment.get_space(Networks.MANAGEMENT)},
+                    {
+                        "endpoint": "ceph-access",
+                        "space": self.deployment.get_space(Networks.STORAGE),
+                    },
+                    {
+                        "endpoint": "migration",
+                        "space": self.deployment.get_space(Networks.DATA),
+                    },
+                    {
+                        "endpoint": "data",
+                        "space": self.deployment.get_space(Networks.DATA),
+                    },
+                    {
+                        "endpoint": "amqp",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "ceilometer-service",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "certificates",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "cos-agent",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "identity-credentials",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "nova-service",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "ovsdb-cms",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "receive-ca-cert",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                ],
+            }
+        )
 
-        extra_tfvars["endpoint_bindings"] = [
-            { "endpoint": "cluster",           "space": self.deployment.get_space(Networks.INTERNAL) },
-            { "endpoint": "certificates",      "space": self.deployment.get_space(Networks.INTERNAL) },
-            { "endpoint": "ovsdb-external",    "space": self.deployment.get_space(Networks.INTERNAL) },
-        ]
         return extra_tfvars
 
 
