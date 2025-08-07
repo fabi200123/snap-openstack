@@ -41,12 +41,6 @@ variable "endpoint_bindings" {
   default     = null
 }
 
-variable "snap_channel" {
-  description = "Snap channel to deploy microovn snap from"
-  type        = string
-  default     = "latest/edge"
-}
-
 variable "ovn-relay-offer-url" {
   description = "Offer URL for OVN relay"
   type        = string

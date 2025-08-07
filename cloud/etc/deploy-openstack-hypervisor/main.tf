@@ -78,7 +78,7 @@ resource "juju_integration" "hypervisor-cert-distributor" {
 }
 
 resource "juju_integration" "hypervisor-certs" {
-  count = (var.ca-offer-url != null) ? 0 : 1
+  count = (var.ca-offer-url != null) ? 1 : 0
   model = var.machine_model
 
   application {
