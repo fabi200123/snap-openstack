@@ -36,31 +36,61 @@ variable "machine_model" {
 }
 
 variable "endpoint_bindings" {
-  description = "Endpoint bindings for microovn"
+  description = "Endpoint bindings for openstack-hypervisor"
   type        = set(map(string))
   default     = null
 }
 
-variable "ovn-relay-offer-url" {
-  description = "Offer URL for OVN relay"
+# Mandatory relation, no defaults
+variable "rabbitmq-offer-url" {
+  description = "Offer URL for openstack rabbitmq"
+  type        = string
+}
+
+# Mandatory relation, no defaults
+variable "keystone-offer-url" {
+  description = "Offer URL for openstack keystone identity-credentials relation"
+  type        = string
+}
+
+variable "cert-distributor-offer-url" {
+  description = "Offer URL for openstack keystone certificate-transfer relation"
   type        = string
   default     = null
 }
 
 variable "ca-offer-url" {
-  description = "Offer URL for certificate authority"
+  description = "Offer URL for Certificates"
   type        = string
   default     = null
 }
 
-variable "cert-distributor-offer-url" {
-  description = "Offer URL for certificate distributor"
+# Mandatory relation, no defaults
+variable "ovn-relay-offer-url" {
+  description = "Offer URL for ovn relay service"
+  type        = string
+}
+
+variable "ceilometer-offer-url" {
+  description = "Offer URL for openstack ceilometer"
   type        = string
   default     = null
 }
 
-variable "ovsdb-cms-offer-url" {
-  description = "Offer URL for OVN OVSDB CMS"
+variable "cinder-volume-ceph-application-name" {
+  description = "Name for cinder-volume-ceph application"
+  type        = string
+  default     = null
+}
+
+# Mandatory relation, no defaults
+variable "nova-offer-url" {
+  description = "Offer URL for openstack nova"
+  type        = string
+}
+
+variable "masakari-offer-url" {
+  description = "Offer URL for openstack masakari"
   type        = string
   default     = null
 }
