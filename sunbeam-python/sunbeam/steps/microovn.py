@@ -118,8 +118,8 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
 
         extra_tfvars["endpoint_bindings"] = [
             { "endpoint": "cluster",          "space": self.deployment.get_space(Networks.INTERNAL) },
-            { "endpoint": "tls-certificates", "space": self.deployment.get_space(Networks.INTERNAL) },
-            { "endpoint": "ovsdb-cms",         "space": self.deployment.get_space(Networks.INTERNAL) },
+            { "endpoint": "certificates", "space": self.deployment.get_space(Networks.INTERNAL) },
+            { "endpoint": "ovsdb-external",         "space": self.deployment.get_space(Networks.INTERNAL) },
         ]
         return extra_tfvars
 
