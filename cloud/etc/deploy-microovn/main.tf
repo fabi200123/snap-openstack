@@ -54,7 +54,7 @@ resource "juju_integration" "microovn-ovsdb-relation" {
   }
   
   application {
-      offer_url = var.ovn-relay-offer-url
+      offer_url = var.ovsdb-cms-offer-url
   }
 }
 
