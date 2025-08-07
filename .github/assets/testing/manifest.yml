@@ -64,8 +64,6 @@ core:
           snap-channel: MICROCEPH_SNAP
       microovn:
         channel: MICROOVN_CHARM
-        config:
-          snap-channel: MICROOVN_SNAP
       rabbitmq-k8s:
         channel: RABBITMQ_CHARM
       mysql-k8s:
