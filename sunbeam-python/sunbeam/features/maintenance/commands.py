@@ -23,6 +23,7 @@ from sunbeam.features.maintenance.utils import (
     get_cluster_status,
 )
 from sunbeam.steps.hypervisor import EnableHypervisorStep
+from sunbeam.steps.microovn import EnableMicroOVNStep
 from sunbeam.steps.maintenance import (
     CordonControlRoleNodeStep,
     CreateWatcherHostMaintenanceAuditStep,
@@ -542,7 +543,7 @@ class DisableMaintenance(MaintenanceCommand):
                 result=uncordon_k8s_node_dry_run_result
             )
         if "network" in node_status:
-            self.ops_viewer.add_step(step_name=EnableHypervisorStep.__name__)
+            self.ops_viewer.add_step(step_name=EnableMicroOVNStep.__name__)
 
         console.print(self.ops_viewer.dry_run_message)
 
