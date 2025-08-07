@@ -1386,6 +1386,7 @@ def join(
     hypervisor_tfhelper = deployment.get_tfhelper("hypervisor-plan")
     plan4.append(TerraformInitStep(openstack_tfhelper))
     plan4.append(TerraformInitStep(hypervisor_tfhelper))
+    microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
     if is_network_node:
             plan4.append(
                 DeployMicroOVNApplicationStep(
