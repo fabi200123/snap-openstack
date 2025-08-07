@@ -10,7 +10,7 @@ permissions:
 
 jobs:
     TICS:
-      runs-on: [self-hosted, linux, amd64, tiobe]
+      runs-on: [self-hosted, linux, amd64, tiobe, noble]
       steps:
         - name: Checkout
           uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
 
             python -m pip install tox
 
-            go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
+            go install honnef.co/go/tools/cmd/staticcheck@v0.6.1
 
         - name: Run sunbeam-python coverage tests
           working-directory: ./sunbeam-python
@@ -50,7 +50,7 @@ jobs:
           uses: tiobe/tics-github-action@v3
           with:
             mode: qserver
-            viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+            viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
             ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
             project: snap-openstack
             branchdir: ${{ env.GITHUB_WORKSPACE }}
