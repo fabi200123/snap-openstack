@@ -107,12 +107,8 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
         openstack_tf_output = self.openstack_tfhelper.output()
 
         juju_offers = {
-            "rabbitmq-offer-url",
-            "keystone-offer-url",
-            "cert-distributor-offer-url",
             "ca-offer-url",
             "ovn-relay-offer-url",
-            "nova-offer-url",
         }
         extra_tfvars = {offer: openstack_tf_output.get(offer) for offer in juju_offers}
 
