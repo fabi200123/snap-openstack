@@ -30,33 +30,6 @@ resource "juju_application" "microovn" {
   endpoint_bindings = var.endpoint_bindings
 }
 
-resource "juju_integration" "microovn-ovn" {
-  model = var.machine_model
-
-  application {
-    name     = juju_application.microovn.name
-    endpoint = "ovsdb-cms"
-  }
-
-  application {
-    offer_url = var.ovn-relay-offer-url
-  }
-}
-
-resource "juju_integration" "microovn-certs" {
-  count = (var.ca-offer-url != null) ? 1 : 0
-  model = var.machine_model
-
-  application {
-    name     = juju_application.microovn.name
-    endpoint = "certificates"
-  }
-
-  application {
-    offer_url = var.ca-offer-url
-  }
-}
-
 output "microovn-application-name" {
   value = juju_application.microovn.name
 }

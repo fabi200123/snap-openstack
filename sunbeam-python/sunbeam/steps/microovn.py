@@ -122,48 +122,12 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
                 "endpoint_bindings": [
                     {"space": self.deployment.get_space(Networks.MANAGEMENT)},
                     {
-                        "endpoint": "ceph-access",
-                        "space": self.deployment.get_space(Networks.STORAGE),
-                    },
-                    {
-                        "endpoint": "migration",
-                        "space": self.deployment.get_space(Networks.DATA),
-                    },
-                    {
-                        "endpoint": "data",
-                        "space": self.deployment.get_space(Networks.DATA),
-                    },
-                    {
-                        "endpoint": "amqp",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
-                        "endpoint": "ceilometer-service",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
                         "endpoint": "certificates",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
                     {
-                        "endpoint": "cos-agent",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
-                        "endpoint": "identity-credentials",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
-                        "endpoint": "nova-service",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
-                        "endpoint": "ovsdb-cms",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
-                    },
-                    {
-                        "endpoint": "receive-ca-cert",
-                        "space": self.deployment.get_space(Networks.INTERNAL),
+                        "endpoint": "ovsdb-external",
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
                 ],
             }
