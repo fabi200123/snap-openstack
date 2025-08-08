@@ -27,7 +27,6 @@ resource "juju_application" "microovn" {
     base     = "ubuntu@24.04"
   }
 
-  endpoint_bindings = var.endpoint_bindings
 }
 
 output "microovn-application-name" {
