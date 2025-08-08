@@ -59,7 +59,7 @@ variable "cert-distributor-offer-url" {
   default     = null
 }
 
-variable "ca-offer-url" {
+variable "ca_offer_url" {
   description = "Offer URL for Certificates"
   type        = string
   default     = null

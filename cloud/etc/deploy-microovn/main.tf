@@ -29,6 +29,19 @@ resource "juju_application" "microovn" {
 
 }
 
+resource "juju_integration" "microovn-certificates" {
+  model = var.machine_model
+
+  application {
+    name     = juju_application.microovn.name
+    endpoint = "tls-certificates"
+  }
+
+  application {
+    offer_url = var.ca_offer_url
+  }
+}
+
 output "microovn-application-name" {
   value = juju_application.microovn.name
 }
