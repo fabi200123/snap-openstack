@@ -112,19 +112,6 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
         }
         extra_tfvars = {offer: openstack_tf_output.get(offer) for offer in juju_offers}
 
-        extra_tfvars.update(
-            {
-                "openstack_model": self.openstack_model,
-                "endpoint_bindings": [
-                    {"space": self.deployment.get_space(Networks.MANAGEMENT)},
-                    {
-                        "endpoint": "tls-certificates",
-                        "space": self.deployment.get_space(Networks.MANAGEMENT),
-                    },
-                ],
-            }
-        )
-
         return extra_tfvars
 
 
