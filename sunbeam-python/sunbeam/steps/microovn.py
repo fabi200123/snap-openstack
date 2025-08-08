@@ -121,10 +121,6 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
                         "endpoint": "tls-certificates",
                         "space": self.deployment.get_space(Networks.MANAGEMENT),
                     },
-                    {
-                        "endpoint": "ovsdb-external",
-                        "space": self.deployment.get_space(Networks.MANAGEMENT),
-                    },
                 ],
             }
         )
