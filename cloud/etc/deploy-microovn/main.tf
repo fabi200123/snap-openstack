@@ -11,24 +11,23 @@ terraform {
 provider "juju" {}
 
 resource "juju_application" "microovn" {
-  name        = "microovn"
-  trust       = true
-  model       = var.machine_model
-  units       = length(var.machine_ids)
+  name  = "microovn"
+  trust = true
+  model = var.machine_model
+  units = length(var.machine_ids)
 
   charm {
-    name     = "microovn"
-    channel  = var.charm_microovn_channel
-    base     = "ubuntu@24.04"
+    name    = "microovn"
+    channel = var.charm_microovn_channel    # e.g. latest/edge
+    base    = "ubuntu@24.04"
   }
 
-  # IMPORTANT: ensure the charm knows which snap channel to install
+  # this is key; without it the charm won’t install the snap
   config = {
-    snap-channel = var.microovn_snap_channel
+    snap-channel = var.microovn_snap_channel  # e.g. latest/edge
   }
 
-  # Bind endpoints to the management space to avoid relation/space mismatch waits
-  endpoint_bindings = var.endpoint_bindings
+  endpoint_bindings = var.endpoint_bindings   # include tls-certificates, ovsdb-cms → management
 }
 
 # OPTIONAL CMRs – only create if offers are provided (match your Python)
