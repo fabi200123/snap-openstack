@@ -32,7 +32,7 @@ resource "juju_application" "microovn" {
 
 # OPTIONAL CMRs – only create if offers are provided (match your Python)
 resource "juju_integration" "microovn-certs" {
-  count = (var["ca-offer-url"] != null) ? 1 : 0
+  count = (var.ca-offer-url != null) ? 1 : 0
   model = var.machine_model
 
   application {
@@ -41,12 +41,12 @@ resource "juju_integration" "microovn-certs" {
   }
 
   application {
-    offer_url = var["ca-offer-url"]
+    offer_url = var.ca-offer-url
   }
 }
 
 resource "juju_integration" "microovn-ovsdb-cms" {
-  count = (var["ovn-relay-offer-url"] != null) ? 1 : 0
+  count = (var.ovn-relay-offer-url != null) ? 1 : 0
   model = var.machine_model
 
   application {
@@ -55,7 +55,7 @@ resource "juju_integration" "microovn-ovsdb-cms" {
   }
 
   application {
-    offer_url = var["ovn-relay-offer-url"]
+    offer_url = var.ovn-relay-offer-url
   }
 }
 
