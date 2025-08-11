@@ -342,11 +342,11 @@ class EnableMaintenance(MaintenanceCommand):
                 action_result=microceph_enter_maintenance_dry_run_action_result
             )
         if "control" in node_status:
-            self.ops_viewer.add_drain_control_role_step(
-                result=drain_k8s_node_dry_run_result
-            )
             self.ops_viewer.add_cordon_control_role_step(
                 result=cordon_k8s_node_dry_run_result
+            )
+            self.ops_viewer.add_drain_control_role_step(
+                result=drain_k8s_node_dry_run_result
             )
 
         console.print(self.ops_viewer.dry_run_message)
