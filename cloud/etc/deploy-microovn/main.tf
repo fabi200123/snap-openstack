@@ -67,19 +67,19 @@ resource "juju_integration" "microovn-certs" {
   }
 }
 
-resource "juju_integration" "microovn-ovsdb-cms" {
-  count = (var.ovn-relay-offer-url != null) ? 1 : 0
-  model = var.machine_model
+# resource "juju_integration" "microovn-ovsdb-cms" {
+#   count = (var.ovn-relay-offer-url != null) ? 1 : 0
+#   model = var.machine_model
 
-  application {
-    name     = juju_application.microovn.name
-    endpoint = "ovsdb"
-  }
+#   application {
+#     name     = juju_application.microovn.name
+#     endpoint = "ovsdb"
+#   }
 
-  application {
-    offer_url = var.ovn-relay-offer-url
-  }
-}
+#   application {
+#     offer_url = var.ovn-relay-offer-url
+#   }
+# }
 
 output "microovn-application-name" {
   value = juju_application.microovn.name
