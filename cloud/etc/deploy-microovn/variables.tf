@@ -43,7 +43,7 @@ variable "endpoint_bindings" {
   default = null
 }
 
-variable "ca_offer_url" {
+variable "ca-offer-url" {
   description = "Offer URL for Certificates"
   type        = string
   default     = "sunbeam/openstack.certificate-authority"
