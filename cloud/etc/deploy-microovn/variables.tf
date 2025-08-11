@@ -62,13 +62,14 @@ variable "cert-distributor-offer-url" {
 variable "ca_offer_url" {
   description = "Offer URL for Certificates"
   type        = string
-  default     = null
+  default     = "sunbeam/openstack.certificate-authority"
 }
 
 # Mandatory relation, no defaults
 variable "ovn-relay-offer-url" {
   description = "Offer URL for ovn relay service"
   type        = string
+  default     = "sunbeam/openstack.ovn-relay"
 }
 
 variable "ceilometer-offer-url" {
