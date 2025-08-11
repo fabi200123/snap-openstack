@@ -26,7 +26,7 @@ resource "juju_application" "microovn" {
 }
 
 resource "juju_application" "microcluster-token-distributor" {
-  name  = "microovn"
+  name  = "microcluster-token-distributor"
   trust = true
   model = var.machine_model
   units = length(var.machine_ids)
