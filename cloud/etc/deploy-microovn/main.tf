@@ -22,12 +22,34 @@ resource "juju_application" "microovn" {
     base    = "ubuntu@24.04"
   }
 
-  # this is key; without it the charm won’t install the snap
-  config = {
-    snap-channel = var.microovn_snap_channel  # e.g. latest/edge
+  endpoint_bindings = var.endpoint_bindings   # include tls-certificates, ovsdb-cms → management
+}
+
+resource "juju_application" "microcluster-token-distributor" {
+  name  = "microovn"
+  trust = true
+  model = var.machine_model
+  units = length(var.machine_ids)
+
+  charm {
+    name    = "microcluster-token-distributor"
+    channel = var.charm_microovn_channel    # e.g. latest/edge
+    base    = "ubuntu@24.04"
+  }
+}
+
+resource "juju_integration" "microovn-microcluster-token-distributor" {
+  model = var.machine_model
+
+  application {
+    name     = juju_application.microovn.name
+    endpoint = "cluster"
   }
 
-  endpoint_bindings = var.endpoint_bindings   # include tls-certificates, ovsdb-cms → management
+  application {
+    name     = juju_application.microcluster-token-distributor.name
+    endpoint = "worker-cluster"
+  }
 }
 
 # OPTIONAL CMRs – only create if offers are provided (match your Python)
