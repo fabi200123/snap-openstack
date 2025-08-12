@@ -40,16 +40,7 @@ variable "endpoint_bindings" {
     endpoint = optional(string)
     space    = string
   }))
-  default = [
-    {
-      endpoint = "certificates"
-      space    = "internal"
-    },
-    {
-      endpoint = "ovsdb-external"
-      space    = "internal"
-    }
-  ]
+  default = null
 }
 
 variable "ca-offer-url" {
