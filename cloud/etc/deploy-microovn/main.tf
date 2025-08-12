@@ -52,34 +52,33 @@ resource "juju_integration" "microovn-microcluster-token-distributor" {
   }
 }
 
-# # OPTIONAL CMRs – only create if offers are provided (match your Python)
-# resource "juju_integration" "microovn-certs" {
-#   count = (var.ca-offer-url != null) ? 1 : 0
-#   model = var.machine_model
+resource "juju_integration" "microovn-certs" {
+  count = (var.ca-offer-url != null) ? 1 : 0
+  model = var.machine_model
 
-#   application {
-#     name     = juju_application.microovn.name
-#     endpoint = "tls-certificates"
-#   }
+  application {
+    name     = juju_application.microovn.name
+    endpoint = "certificates"
+  }
 
-#   application {
-#     offer_url = var.ca-offer-url
-#   }
-# }
+  application {
+    offer_url = var.ca-offer-url
+  }
+}
 
-# resource "juju_integration" "microovn-ovsdb-cms" {
-#   count = (var.ovn-relay-offer-url != null) ? 1 : 0
-#   model = var.machine_model
+resource "juju_integration" "microovn-ovsdb-cms" {
+  count = (var.ovn-relay-offer-url != null) ? 1 : 0
+  model = var.machine_model
 
-#   application {
-#     name     = juju_application.microovn.name
-#     endpoint = "ovsdb"
-#   }
+  application {
+    name     = juju_application.microovn.name
+    endpoint = "ovsdb-external"
+  }
 
-#   application {
-#     offer_url = var.ovn-relay-offer-url
-#   }
-# }
+  application {
+    offer_url = var.ovn-relay-offer-url
+  }
+}
 
 output "microovn-application-name" {
   value = juju_application.microovn.name
