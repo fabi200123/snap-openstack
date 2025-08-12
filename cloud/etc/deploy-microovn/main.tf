@@ -48,7 +48,7 @@ resource "juju_integration" "microovn-microcluster-token-distributor" {
 
   application {
     name     = juju_application.microcluster-token-distributor.name
-    endpoint = "worker-cluster"
+    endpoint = "microcluster-cluster"
   }
 }
 
