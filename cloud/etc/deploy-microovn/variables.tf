@@ -43,11 +43,11 @@ variable "endpoint_bindings" {
   default = [
     {
       endpoint = "certificates"
-      space    = "management"
+      space    = "internal"
     },
     {
       endpoint = "ovsdb-external"
-      space    = "management"
+      space    = "internal"
     }
   ]
 }
