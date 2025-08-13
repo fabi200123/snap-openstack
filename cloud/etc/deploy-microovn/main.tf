@@ -10,6 +10,19 @@ terraform {
 
 provider "juju" {}
 
+resource "juju_application" "microcluster-token-distributor" {
+  name  = "microcluster-token-distributor"
+  trust = true
+  model = var.machine_model
+  units = length(var.machine_ids)
+
+  charm {
+    name    = "microcluster-token-distributor"
+    channel = var.charm_microovn_channel    # e.g. latest/edge
+    base    = "ubuntu@24.04"
+  }
+}
+
 resource "juju_application" "microovn" {
   name  = "microovn"
   trust = true
@@ -23,19 +36,6 @@ resource "juju_application" "microovn" {
   }
 
   endpoint_bindings = var.endpoint_bindings   # include tls-certificates, ovsdb-cms → management
-}
-
-resource "juju_application" "microcluster-token-distributor" {
-  name  = "microcluster-token-distributor"
-  trust = true
-  model = var.machine_model
-  units = length(var.machine_ids)
-
-  charm {
-    name    = "microcluster-token-distributor"
-    channel = var.charm_microovn_channel    # e.g. latest/edge
-    base    = "ubuntu@24.04"
-  }
 }
 
 resource "juju_integration" "microovn-microcluster-token-distributor" {
