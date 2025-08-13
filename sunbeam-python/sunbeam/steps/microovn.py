@@ -121,7 +121,7 @@ class ReapplyMicroOVNOptionalIntegrationsStep(DeployMicroOVNApplicationStep):
     def tf_apply_extra_args(self) -> list[str]:
         """Extra args for terraform apply to reapply only optional CMR integrations."""
         return [
-            "-target=juju_integration.microovn-cert-distributor",
+            "-target=juju_integration.microovn-microcluster-token-distributor",
             "-target=juju_integration.microovn-certs",
             "-target=juju_integration.microovn-ovsdb-cms",
         ]
