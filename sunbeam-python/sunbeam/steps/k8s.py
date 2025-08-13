@@ -94,7 +94,6 @@ else:
 LOG = logging.getLogger(__name__)
 K8S_CONFIG_KEY = "TerraformVarsK8S"
 K8S_ADDONS_CONFIG_KEY = "TerraformVarsK8SAddons"
-TRAEFIK_CONFIG_KEY = "TerraformVarsTraefikEndpoints"
 APPLICATION = "k8s"
 K8S_APP_TIMEOUT = 300  # 5 minutes, managing the application should be fast
 K8S_DESTROY_TIMEOUT = 900
@@ -146,23 +145,6 @@ def k8s_addons_questions():
     }
 
 
-def endpoint_questions():
-    return {
-        "traefik": PromptQuestion(
-            "Hostname for Traefik internal endpoint",
-            default_value="",
-        ),
-        "traefik-public": PromptQuestion(
-            "Hostname for Traefik public endpoint",
-            default_value="",
-        ),
-        "traefik-rgw": PromptQuestion(
-            "Hostname for Traefik RGW endpoint",
-            default_value="",
-        ),
-    }
-
-
 class KubeClientError(K8SError):
     pass
 
@@ -186,11 +168,21 @@ def get_kube_client(client: Client, namespace: str | None = None) -> "l_client.C
         raise KubeClientError("Error creating k8s client") from e
 
 
+def load_addons_config(client: Client) -> dict:
+    """Load K8S addons configuration."""
+    return read_config(client, K8S_ADDONS_CONFIG_KEY)
+
+
+def get_loadbalancer_config(client: Client) -> str | None:
+    """Get the load balancer configuration."""
+    addons_config = load_addons_config(client)
+    return addons_config.get("k8s-addons", {}).get("loadbalancer")
+
+
 class DeployK8SApplicationStep(DeployMachineApplicationStep):
     """Deploy K8S application using Terraform."""
 
     _ADDONS_CONFIG = K8S_ADDONS_CONFIG_KEY
-    _TRAEFIK_CONFIG_KEY = TRAEFIK_CONFIG_KEY
 
     def __init__(
         self,
@@ -253,28 +245,6 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
         )
         write_answers(self.client, self._ADDONS_CONFIG, self.variables)
 
-        # Traefik endpoints prompt
-        self.traefik_variables = load_answers(self.client, self._TRAEFIK_CONFIG_KEY)
-        self.traefik_variables.setdefault("traefik-endpoints", {})
-
-        preseed = getattr(self.manifest.core.config, "traefik_endpoints", {}) or {}
-
-        endpoint_bank = QuestionBank(
-            questions=endpoint_questions(),
-            console=console,
-            preseed=preseed,
-            previous_answers=self.traefik_variables["traefik-endpoints"],
-            accept_defaults=self.accept_defaults,
-            show_hint=show_hint,
-        )
-
-        for key in endpoint_questions():
-            answer = endpoint_bank.questions[key].ask()
-            if answer:
-                self.traefik_variables.setdefault("traefik-endpoints", {})[key] = answer
-
-        write_answers(self.client, self._TRAEFIK_CONFIG_KEY, self.traefik_variables)
-
     def has_prompts(self) -> bool:
         """Returns true if the step has prompts that it can ask the user.
 
@@ -318,25 +288,6 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
 
         return config_tfvars
 
-    def _get_traefik_endpoint_tfvars(self) -> dict:
-        """Prepare Traefik endpoint terraform variables."""
-        traefik_vars = load_answers(self.client, self._TRAEFIK_CONFIG_KEY).get(
-            "traefik-endpoints", {}
-        )
-
-        return {
-            "traefik-config": {
-                # Use underscore in key to match charm config
-                "external_hostname": traefik_vars.get("traefik"),
-            },
-            "traefik-public-config": {
-                "external_hostname": traefik_vars.get("traefik-public"),
-            },
-            "traefik-rgw-config": {
-                "external_hostname": traefik_vars.get("traefik-rgw"),
-            },
-        }
-
     def extra_tfvars(self) -> dict:
         """Extra terraform vars to pass to terraform apply."""
         tfvars = {
@@ -345,22 +296,6 @@ class DeployK8SApplicationStep(DeployMachineApplicationStep):
             ],
             "k8s_config": self._get_k8s_config_tfvars(),
         }
-        traefik_vars = load_answers(self.client, self._TRAEFIK_CONFIG_KEY).get(
-            "traefik-endpoints", {}
-        )
-
-        tfvars.update(
-            {
-                "traefik-config": {"external_hostname": traefik_vars.get("traefik")},
-                "traefik-public-config": {
-                    "external_hostname": traefik_vars.get("traefik-public")
-                },
-                "traefik-rgw-config": {
-                    "external_hostname": traefik_vars.get("traefik-rgw")
-                },
-            }
-        )
-
         return tfvars
 
 

@@ -1282,15 +1282,6 @@ class TestMaasDeployK8SApplicationStep:
                 "load-balancer-l2-mode": True,
                 "node-labels": "sunbeam/deployment=test_deployment",
             },
-            "traefik-config": {
-                "external_hostname": None,
-            },
-            "traefik-public-config": {
-                "external_hostname": None,
-            },
-            "traefik-rgw-config": {
-                "external_hostname": None,
-            },
         }
 
         assert step.extra_tfvars() == expected_tfvars
@@ -1311,7 +1302,7 @@ class TestMaasDeployK8SApplicationStep:
         )
         result = step.is_skip()
         assert result.result_type == ResultType.FAILED
-        assert result.message == "Failed to get ip ranges"
+        assert result.message == "Failed to find ip ranges for space: 'public_space'"
 
     def test_is_skip_with_no_public_ranges(self, mocker, deployment_k8s):
         mocker.patch(
@@ -1329,7 +1320,9 @@ class TestMaasDeployK8SApplicationStep:
         )
         result = step.is_skip()
         assert result.result_type == ResultType.FAILED
-        assert result.message == "No public ip range found"
+        assert (
+            result.message == "Failed to find public ip range for label: 'public_api'"
+        )
 
     def test_is_skip_with_internal_ranges_error(self, mocker, deployment_k8s):
         mocker.patch(
@@ -1358,7 +1351,7 @@ class TestMaasDeployK8SApplicationStep:
         )
         result = step.is_skip()
         assert result.result_type == ResultType.FAILED
-        assert result.message == "Failed to get ip ranges"
+        assert result.message == "Failed to find ip ranges for space: 'internal_space'"
 
     def test_is_skip_with_no_internal_ranges(self, mocker, deployment_k8s):
         mocker.patch(
@@ -1387,7 +1380,9 @@ class TestMaasDeployK8SApplicationStep:
         )
         result = step.is_skip()
         assert result.result_type == ResultType.FAILED
-        assert result.message == "No internal ip range found"
+        assert (
+            result.message == "Failed to find public ip range for label: 'internal_api'"
+        )
 
 
 class FakeIPPool:

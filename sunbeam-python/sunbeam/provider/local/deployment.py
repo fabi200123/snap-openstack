@@ -33,7 +33,11 @@ from sunbeam.core.juju import (
     JujuController,
 )
 from sunbeam.core.k8s import K8SHelper
-from sunbeam.core.openstack import REGION_CONFIG_KEY
+from sunbeam.core.openstack import (
+    ENDPOINTS_CONFIG_KEY,
+    REGION_CONFIG_KEY,
+    generate_endpoint_preseed_questions,
+)
 from sunbeam.core.questions import QuestionBank, load_answers, show_questions
 from sunbeam.provider.local.steps import local_hypervisor_questions
 from sunbeam.steps.clusterd import (
@@ -46,6 +50,7 @@ from sunbeam.steps.microceph import CONFIG_DISKS_KEY, microceph_questions
 from sunbeam.steps.openstack import (
     TOPOLOGY_KEY,
     database_topology_questions,
+    endpoint_questions,
     region_questions,
 )
 
@@ -268,6 +273,17 @@ class LocalDeployment(Deployment):
                 comment_out=True,
             )
         )
+
+        # Endpoints configuration
+        try:
+            variables = load_answers(client, ENDPOINTS_CONFIG_KEY)
+        except ClusterServiceUnavailableException:
+            variables = {}
+
+        preseed_content.extend(
+            generate_endpoint_preseed_questions(endpoint_questions, console, variables)
+        )
+
         try:
             variables = load_answers(client, CONFIG_DISKS_KEY)
         except ClusterServiceUnavailableException:

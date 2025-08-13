@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import contextlib
+import ipaddress
 import json
 import logging
 from functools import cache
@@ -24,6 +25,7 @@ from sunbeam.core.common import (
     Result,
     ResultType,
     SunbeamException,
+    parse_ip_range_or_cidr,
 )
 from sunbeam.core.juju import ActionFailedException, JujuHelper
 from sunbeam.core.manifest import Manifest
@@ -31,6 +33,8 @@ from sunbeam.provider.common import nic_utils
 from sunbeam.steps import hypervisor
 from sunbeam.steps.cluster_status import ClusterStatusStep
 from sunbeam.steps.clusterd import CLUSTERD_PORT
+from sunbeam.steps.k8s import get_loadbalancer_config
+from sunbeam.steps.openstack import EndpointsConfigurationStep
 
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -539,3 +543,90 @@ class LocalConfigSRIOVStep(BaseStep):
             return Result(ResultType.FAILED, msg)
 
         return Result(ResultType.COMPLETED)
+
+
+class LocalEndpointsConfigurationStep(EndpointsConfigurationStep):
+    """Configuration endpoints for local provider."""
+
+    def __init__(
+        self,
+        client: Client,
+        manifest: Manifest | None = None,
+        accept_defaults: bool = False,
+    ):
+        super().__init__(client, manifest, accept_defaults)
+        self.loadbalancer_range = None
+
+    def _loadbalancer_range(self):
+        """Load the load balancer range."""
+        if not self.loadbalancer_range:
+            loadbalancer_range = get_loadbalancer_config(self.client)
+            if loadbalancer_range is None:
+                raise SunbeamException(
+                    "Load balancer range is not configured. Please configure it first."
+                )
+            self.loadbalancer_range = parse_ip_range_or_cidr(loadbalancer_range)
+        return self.loadbalancer_range
+
+    def _validate_endpoint(self, endpoint: str, ip: str) -> bool:
+        """Let's validate the endpoint.
+
+        # TODO(gboutry): Endpoint is ignored in Local Mode because we
+        # cannot yet configure loadbalancers per network space yet.
+        """
+        ip_address = ipaddress.ip_address(ip)
+        loadbalancer_range = self._loadbalancer_range()
+
+        if isinstance(
+            loadbalancer_range, (ipaddress.IPv4Network, ipaddress.IPv6Network)
+        ):
+            if ip_address.version != loadbalancer_range.version:
+                LOG.debug(
+                    "IP version mismatch: ip=%s (v%d) vs loadbalancer_range=%s (v%d)",
+                    ip_address,
+                    ip_address.version,
+                    loadbalancer_range,
+                    loadbalancer_range.version,
+                )
+                return False
+            is_in_range = ip_address in loadbalancer_range
+            LOG.debug(
+                "IP %s %s in loadbalancer network %s",
+                ip_address,
+                "is" if is_in_range else "is not",
+                loadbalancer_range,
+            )
+            return is_in_range
+        elif isinstance(loadbalancer_range, tuple):
+            start_ip, end_ip = loadbalancer_range
+            if (
+                ip_address.version != start_ip.version
+                or start_ip.version != end_ip.version
+            ):
+                LOG.debug(
+                    "IP version mismatch in range: ip=%s (v%d) vs range=%s-%s "
+                    "(v%d-v%d)",
+                    ip_address,
+                    ip_address.version,
+                    start_ip,
+                    end_ip,
+                    start_ip.version,
+                    end_ip.version,
+                )
+                return False
+            is_in_range = start_ip <= ip_address <= end_ip  # type: ignore
+            LOG.debug(
+                "IP %s %s in loadbalancer range %s-%s",
+                ip_address,
+                "is" if is_in_range else "is not",
+                start_ip,
+                end_ip,
+            )
+            return is_in_range
+        else:
+            LOG.debug(
+                "Invalid loadbalancer_range type: %s (expected IPv4Network, "
+                "IPv6Network, or tuple)",
+                type(loadbalancer_range).__name__,
+            )
+            return False

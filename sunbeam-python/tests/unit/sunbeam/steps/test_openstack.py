@@ -20,7 +20,7 @@ from sunbeam.core.k8s import (
     METALLB_IP_ANNOTATION,
 )
 from sunbeam.core.manifest import Manifest
-from sunbeam.core.openstack import REGION_CONFIG_KEY
+from sunbeam.core.openstack import ENDPOINTS_CONFIG_KEY, REGION_CONFIG_KEY
 from sunbeam.core.terraform import TerraformException
 from sunbeam.steps.openstack import (
     DATABASE_MEMORY_KEY,
@@ -66,6 +66,7 @@ class TestDeployControlPlaneStep(unittest.TestCase):
                 }
             ),
             DATABASE_MEMORY_KEY: json.dumps({}),
+            ENDPOINTS_CONFIG_KEY: json.dumps({}),
         }
 
         def _read_config_mock(key):

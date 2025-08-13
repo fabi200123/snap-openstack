@@ -235,6 +235,17 @@ class CoreConfig(pydantic.BaseModel):
         # Excluded PCI addresses per node.
         excluded_devices: dict[str, list[str]] | None = None
 
+    class _Endpoints(pydantic.BaseModel):
+        class _Endpoint(pydantic.BaseModel):
+            hostname: str | None = None
+            ip: pydantic.IPvAnyAddress | None = None
+
+        ingress_internal: _Endpoint | None = pydantic.Field(
+            None, alias="ingress-internal"
+        )
+        ingress_public: _Endpoint | None = pydantic.Field(None, alias="ingress-public")
+        ingress_rgw: _Endpoint | None = pydantic.Field(None, alias="ingress-rgw")
+
     proxy: _ProxyConfig | None = None
     bootstrap: _BootstrapConfig | None = None
     database: str | None = None
@@ -242,9 +253,7 @@ class CoreConfig(pydantic.BaseModel):
     addons: _Addons | None = None
     identity: _Identity | None = None
     k8s_addons: _K8sAddons | None = pydantic.Field(default=None, alias="k8s-addons")
-    traefik_endpoints: dict[str, str] | None = pydantic.Field(
-        default=None, alias="traefik-endpoints"
-    )
+    endpoints: _Endpoints | None = None
     user: _User | None = None
     external_network: _ExternalNetwork | None = None
     microceph_config: pydantic.RootModel[dict[str, _HostMicroCephConfig]] | None = None

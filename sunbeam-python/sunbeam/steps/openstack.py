@@ -19,6 +19,7 @@ from sunbeam.core.common import (
     BaseStep,
     Result,
     ResultType,
+    SunbeamException,
     convert_proxy_to_model_configs,
     convert_retry_failure_as_result,
     get_host_total_cores,
@@ -36,8 +37,17 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.k8s import CREDENTIAL_SUFFIX, K8SHelper
 from sunbeam.core.manifest import Manifest
-from sunbeam.core.openstack import DEFAULT_REGION, OPENSTACK_MODEL, REGION_CONFIG_KEY
+from sunbeam.core.openstack import (
+    DEFAULT_REGION,
+    ENDPOINTS_CONFIG_KEY,
+    INGRESS_ENDPOINT_TERRAFORM_MAP,
+    INGRESS_ENDPOINT_TYPES,
+    OPENSTACK_MODEL,
+    REGION_CONFIG_KEY,
+    get_ingress_endpoint_key,
+)
 from sunbeam.core.questions import (
+    ConfirmQuestion,
     PromptQuestion,
     QuestionBank,
     load_answers,
@@ -100,6 +110,42 @@ DEFAULT_STORAGE_SINGLE_DATABASE = "20G"
 # This dict holds default storage values for multi mysql mode
 # If a service not specified, defaults to 1G
 DEFAULT_STORAGE_MULTI_DATABASE = {"nova": "10G"}
+
+
+def endpoints_questions():
+    return {
+        "configure": ConfirmQuestion(
+            "Configure endpoint services?",
+            default_value=False,
+        ),
+    }
+
+
+def endpoint_questions(endpoint: str):
+    return {
+        "configure_ip": ConfirmQuestion(
+            f"Configure IP address for {endpoint} endpoint?",
+            default_value=False,
+        ),
+        "ip": PromptQuestion(
+            f"IP address for {endpoint} endpoint",
+            description=(
+                "The load-balancer IP address used by the service,"
+                " it must match the network definition. Leave empty if not needed."
+            ),
+        ),
+        "configure_hostname": ConfirmQuestion(
+            f"Configure hostname for {endpoint} endpoint?",
+            default_value=False,
+        ),
+        "hostname": PromptQuestion(
+            f"Hostname for {endpoint} endpoint",
+            description=(
+                "The load-balancer hostname used by the service,"
+                " it must match the network definition."
+            ),
+        ),
+    }
 
 
 def determine_target_topology(client: Client) -> str:
@@ -442,6 +488,33 @@ class DeployControlPlaneStep(BaseStep, JujuStepHelper):
         """Create terraform variables related to region."""
         return {"region": read_config(self.client, REGION_CONFIG_KEY)["region"]}
 
+    def get_endpoints_tfvars(self) -> dict:
+        """Create terraform variables related to endpoints."""
+        try:
+            endpoints_config = read_config(self.client, ENDPOINTS_CONFIG_KEY)
+        except ConfigItemNotFoundException:
+            return {}
+
+        if not endpoints_config.get("configure", False):
+            # No endpoints configured, return empty dict
+            return {}
+
+        tfvars: dict[str, dict] = {}
+
+        for endpoint in INGRESS_ENDPOINT_TYPES:
+            config_name = INGRESS_ENDPOINT_TERRAFORM_MAP[endpoint]
+            endpoint_config = endpoints_config.get(get_ingress_endpoint_key(endpoint))
+            if not endpoint_config:
+                continue
+            hostname = endpoint_config.get("hostname")
+            ip = endpoint_config.get("ip")
+            config = tfvars.setdefault(config_name, {})
+            if endpoint_config.get("configure_hostname") and hostname:
+                config["external_hostname"] = hostname
+            if endpoint_config.get("configure_ip") and ip:
+                config["loadbalancer_annotations"] = "metallb.io/loadBalancerIPs=" + ip
+        return tfvars
+
     def remove_blocked_apps_from_features(self) -> list:
         """Apps that are in blocked state from features.
 
@@ -533,6 +606,7 @@ class DeployControlPlaneStep(BaseStep, JujuStepHelper):
                 service_scale_function(os_api_scale, len(storage_nodes))
             )
         )
+        extra_tfvars.update(self.get_endpoints_tfvars())
         extra_tfvars.update(
             {
                 "model": self.model,
@@ -797,6 +871,199 @@ class PromptRegionStep(BaseStep):
         :return:
         """
         return Result(ResultType.COMPLETED, f"Region set to {self.variables['region']}")
+
+
+class EndpointsConfigurationStep(BaseStep):
+    """Prompt user for endpoints configuration."""
+
+    def __init__(
+        self,
+        client: Client,
+        manifest: Manifest | None = None,
+        accept_defaults: bool = False,
+    ):
+        super().__init__("Endpoints", "Query user for endpoints configuration")
+        self.client = client
+        self.manifest = manifest
+        self.accept_defaults = accept_defaults
+        self.variables: dict = {}
+
+    def prompt(
+        self,
+        console: Console | None = None,
+        show_hint: bool = False,
+    ) -> None:
+        """Determines if the step can take input from the user.
+
+        Prompts are used by Steps to gather the necessary input prior to
+        running the step. Steps should not expect that the prompt will be
+        available and should provide a reasonable default where possible.
+        """
+        self.variables = load_answers(self.client, ENDPOINTS_CONFIG_KEY)
+
+        preseed = {}
+        if self.manifest and self.manifest.core.config.endpoints:
+            preseed = self.manifest.core.config.endpoints.model_dump()
+
+        manifest_configured = False
+
+        if preseed:
+            preseed["configure"] = True
+            manifest_configured = True
+
+        configure_endpoint_bank = QuestionBank(
+            questions=endpoints_questions(),
+            console=console,
+            preseed=preseed,
+            previous_answers=self.variables,
+            accept_defaults=self.accept_defaults,
+            show_hint=show_hint,
+        )
+
+        self.variables["configure"] = configure_endpoint_bank.configure.ask()
+
+        if not self.variables["configure"]:
+            write_answers(self.client, ENDPOINTS_CONFIG_KEY, self.variables)
+            return
+
+        for endpoint in INGRESS_ENDPOINT_TYPES:
+            self._configure_endpoint(
+                endpoint, preseed, manifest_configured, console, show_hint
+            )
+
+        write_answers(self.client, ENDPOINTS_CONFIG_KEY, self.variables)
+
+    def _validate_endpoint(self, endpoint: str, ip: str) -> bool:
+        """Validate the endpoint IP address is part of the expected space."""
+        raise NotImplementedError
+
+    def _configure_endpoint(
+        self,
+        endpoint: str,
+        preseed: dict,
+        manifest_configured: bool,
+        console: Console | None,
+        show_hint: bool,
+    ) -> None:
+        """Configure a single endpoint with IP and hostname settings."""
+        key = get_ingress_endpoint_key(endpoint)
+        endpoint_question = endpoint_questions(endpoint)
+        endpoint_preseed = self._prepare_endpoint_preseed(
+            preseed, key, endpoint_question, manifest_configured
+        )
+
+        endpoint_bank = QuestionBank(
+            questions=endpoint_question,
+            console=console,
+            preseed=endpoint_preseed,
+            previous_answers=self.variables.get(key, {}),
+            accept_defaults=self.accept_defaults,
+            show_hint=show_hint,
+        )
+
+        self.variables[key] = {}
+        self._configure_endpoint_ip(endpoint, endpoint_bank, key, manifest_configured)
+        self._configure_endpoint_hostname(endpoint_bank, key)
+
+    def _prepare_endpoint_preseed(
+        self,
+        preseed: dict,
+        key: str,
+        endpoint_question: dict,
+        manifest_configured: bool,
+    ) -> dict:
+        """Prepare preseed data for endpoint configuration."""
+        endpoint_preseed = preseed.get(key.replace("-", "_")) or {}
+        if manifest_configured:
+            for question in endpoint_question:
+                if question.startswith("configure"):
+                    continue
+                endpoint_preseed["configure_" + question] = bool(
+                    endpoint_preseed.get(question)
+                )
+        return endpoint_preseed
+
+    def _configure_endpoint_ip(
+        self,
+        endpoint: str,
+        endpoint_bank: QuestionBank,
+        key: str,
+        manifest_configured: bool,
+    ) -> None:
+        """Configure IP address for an endpoint with validation."""
+        configure_ip = endpoint_bank.configure_ip.ask()
+        self.variables[key]["configure_ip"] = configure_ip
+
+        if not configure_ip:
+            self.variables[key]["ip"] = None
+            return
+
+        ip = self._get_valid_ip(endpoint, endpoint_bank, manifest_configured)
+        self.variables[key]["ip"] = str(ip) if ip else None
+
+    def _get_valid_ip(
+        self, endpoint: str, endpoint_bank: QuestionBank, manifest_configured: bool
+    ) -> str | None:
+        """Get a valid IP address from user input with validation loop."""
+        ip = endpoint_bank.ip.ask()
+
+        while ip:
+            try:
+                if self._validate_endpoint(endpoint, ip):
+                    return ip
+
+                if manifest_configured:
+                    raise SunbeamException(
+                        f"Invalid IP address for {endpoint} endpoint: {ip}"
+                    )
+
+                LOG.warning(
+                    f"Invalid IP address for {endpoint} endpoint: {ip}, "
+                    "IP is not in the configured load balancer range"
+                )
+                ip = endpoint_bank.ip.ask()
+
+            except (ValueError, SunbeamException) as e:
+                if manifest_configured:
+                    raise e
+
+                LOG.warning(
+                    f"Invalid IP address for {endpoint} endpoint: {ip}, error: {e}"
+                )
+                ip = endpoint_bank.ip.ask()
+
+        return ip
+
+    def _configure_endpoint_hostname(
+        self, endpoint_bank: QuestionBank, key: str
+    ) -> None:
+        """Configure hostname for an endpoint."""
+        configure_hostname = endpoint_bank.configure_hostname.ask()
+        self.variables[key]["configure_hostname"] = configure_hostname
+
+        if not configure_hostname:
+            return
+
+        hostname = self._get_valid_hostname(endpoint_bank)
+        self.variables[key]["hostname"] = hostname
+
+    def _get_valid_hostname(self, endpoint_bank: QuestionBank) -> str:
+        """Get a valid hostname from user input with validation loop."""
+        hostname = endpoint_bank.hostname.ask()
+
+        while not hostname:
+            LOG.warning("Hostname cannot be empty, please enter a valid hostname")
+            hostname = endpoint_bank.hostname.ask()
+
+        return hostname
+
+    def has_prompts(self) -> bool:
+        """Returns true if the step has prompts that it can ask the user.
+
+        :return: True if the step can ask the user for prompts,
+                 False otherwise
+        """
+        return True
 
 
 def validate_database_topologies(database: str):

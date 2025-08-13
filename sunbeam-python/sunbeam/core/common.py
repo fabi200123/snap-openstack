@@ -8,6 +8,7 @@ import logging
 import os
 import queue
 import threading
+import typing
 from pathlib import Path
 from typing import Any, Sequence, Type, TypeVar
 
@@ -46,6 +47,8 @@ K8S_CLUSTER_SERVICE_CIDR = "10.152.183.0/24"
 K8S_CLUSTER_POD_CIDR = "10.1.0.0/16"
 
 BaseStepSubclass = TypeVar("BaseStepSubclass", bound="BaseStep")
+
+AnyAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 class Role(enum.Enum):
@@ -567,30 +570,57 @@ def infer_risk(snap: Snap) -> RiskLevel:
             return RiskLevel.STABLE
 
 
+def parse_ip_range(
+    ip_range: str, separator: str = "-"
+) -> (
+    tuple[ipaddress.IPv4Address, ipaddress.IPv4Address]
+    | tuple[ipaddress.IPv6Address, ipaddress.IPv6Address]
+):
+    """Parse an IP range in the form of 'ip-ip' into a tuple of addresses."""
+    ips = ip_range.split("-")
+    if len(ips) != 2:
+        raise ValueError("Invalid IP range, must be in the form of 'ip-ip'")
+    ip1 = ipaddress.ip_address(ips[0].strip())
+    ip2 = ipaddress.ip_address(ips[1].strip())
+    if not isinstance(ip1, type(ip2)):
+        raise ValueError("IP addresses must be of the same type (IPv4 or IPv6)")
+    if isinstance(ip1, ipaddress.IPv4Address):
+        return (ip1, typing.cast(ipaddress.IPv4Address, ip2))
+    return (ip1, typing.cast(ipaddress.IPv6Address, ip2))
+
+
+def parse_ip_range_or_cidr(
+    ip_range: str, separator: str = "-"
+) -> (
+    tuple[ipaddress.IPv4Address, ipaddress.IPv4Address]
+    | tuple[ipaddress.IPv6Address, ipaddress.IPv6Address]
+    | ipaddress.IPv4Network
+    | ipaddress.IPv6Network
+):
+    """Parse an IP range or CIDR notation into a tuple of addresses or networks."""
+    ips = ip_range.split(separator)
+    if len(ips) == 1:
+        if "/" not in ips[0]:
+            raise ValueError("Invalid CIDR definition, must be in the form 'ip/mask'")
+        return ipaddress.ip_network(ips[0].strip())
+    elif len(ips) == 2:
+        return parse_ip_range(ip_range, separator)
+    else:
+        raise ValueError("Invalid IP range, must be in the form of 'ip-ip' or 'cidr'")
+
+
 def validate_cidr_or_ip_ranges(ip_ranges: str):
     for ip_range in ip_ranges.split(","):
         validate_cidr_or_ip_range(ip_range)
 
 
 def validate_cidr_or_ip_range(ip_range: str):
-    ips = ip_range.split("-")
-    if len(ips) == 1:
-        if "/" not in ips[0]:
-            raise ValueError("Invalid CIDR definition, must be in the form 'ip/mask'")
-        ipaddress.ip_network(ips[0])
-    elif len(ips) == 2:
-        ipaddress.ip_address(ips[0])
-        ipaddress.ip_address(ips[1])
-    else:
-        raise ValueError("Invalid IP range, must be in the form of 'ip-ip' or 'cidr'")
+    _ = parse_ip_range_or_cidr(ip_range, separator="-")
 
 
 def validate_ip_range(ip_range: str):
-    ips = ip_range.split("-")
-    if len(ips) == 2:
-        ipaddress.ip_address(ips[0])
-        ipaddress.ip_address(ips[1])
-    else:
+    ips = parse_ip_range_or_cidr(ip_range, separator="-")
+    if not isinstance(ips, tuple):
         raise ValueError("Invalid IP range, must be in the form of 'ip-ip'")
 
 
