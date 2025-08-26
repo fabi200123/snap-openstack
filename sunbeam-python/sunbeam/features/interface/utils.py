@@ -12,8 +12,8 @@ import click
 from sunbeam.lazy import LazyImport
 
 if typing.TYPE_CHECKING:
-    import cryptography.hazmat.backends as backends
     import cryptography.exceptions as crypto_exceptions
+    import cryptography.hazmat.backends as backends
     import cryptography.hazmat.primitives as primitives
     import cryptography.x509 as x509
     import cryptography.x509.oid as x509_oid
@@ -23,7 +23,7 @@ else:
     primitives = LazyImport("cryptography.hazmat.primitives")
     x509 = LazyImport("cryptography.x509")
     x509_oid = LazyImport("cryptography.x509.oid")
-    
+
 
 LOG = logging.getLogger()
 
@@ -171,4 +171,20 @@ def cert_and_key_match(certificate: bytes, key: bytes) -> bool:
         key, password=None, backend=backends.default_backend()
     )
     private_public_key = private_key.public_key()
-    return cert_pub_key.public_numbers() == private_public_key.public_numbers()
+
+    # For key types that have public_numbers() method (RSA, DSA, ECC)
+    if hasattr(cert_pub_key, "public_numbers") and hasattr(
+        private_public_key, "public_numbers"
+    ):
+        return cert_pub_key.public_numbers() == private_public_key.public_numbers()
+
+    # For Edwards and Montgomery curves (Ed25519, Ed448, X25519, X448)
+    # Compare the raw public key bytes
+    if hasattr(cert_pub_key, "public_bytes_raw") and hasattr(
+        private_public_key, "public_bytes_raw"
+    ):
+        cert_bytes = cert_pub_key.public_bytes_raw()
+        private_bytes = private_public_key.public_bytes_raw()
+        return cert_bytes == private_bytes
+
+    return False

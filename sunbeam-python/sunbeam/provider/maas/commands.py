@@ -178,8 +178,8 @@ from sunbeam.steps.openstack import (
 )
 from sunbeam.steps.sso import (
     DeployIdentityProvidersStep,
-    ValidateIdentityManifest,
     SetKeystoneSAMLCertAndKeyStep,
+    ValidateIdentityManifest,
 )
 from sunbeam.steps.sunbeam_machine import (
     AddSunbeamMachineUnitsStep,

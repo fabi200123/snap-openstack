@@ -3,13 +3,13 @@
 
 import copy
 import logging
-import tempfile
 import queue
+import tempfile
+import xml.etree.ElementTree as ET  # noqa: S405
 from typing import (
     Any,
     Mapping,
 )
-import xml.etree.ElementTree as ET
 
 import click
 import requests
@@ -41,9 +41,7 @@ from sunbeam.core.terraform import (
     TerraformException,
     TerraformHelper,
 )
-from sunbeam.features.interface.utils import (
-    cert_and_key_match
-)
+from sunbeam.features.interface.utils import cert_and_key_match
 from sunbeam.steps.openstack import CONFIG_KEY
 
 LOG = logging.getLogger(__name__)
@@ -56,16 +54,12 @@ _GOOGLE_ISSUER_URL = "https://accounts.google.com"
 _ENTRA_ISSUER_URL = "https://login.microsoftonline.com/%(microsoft_tenant)s/v2.0"
 _OKTA_ISSUER_URL = "https://%(okta_org)s.okta.com"
 
-_GOOGLE_SAML2_METADATA_URL = (
-    "https://accounts.google.com/o/saml2/idp?idpid=%(app_id)s"
-)
+_GOOGLE_SAML2_METADATA_URL = "https://accounts.google.com/o/saml2/idp?idpid=%(app_id)s"
 _ENTRA_SAML_METADATA_URL = (
     "https://login.microsoftonline.com/%(microsoft_tenant)s/federationmetadata/2007-06"
     "/federationmetadata.xml?appid=%(app_id)s"
 )
-_OKTA_SAML2_METADATA_URL = (
-    "https://%(okta_org)s/app/%(app_id)s/sso/saml/metadata"
-)
+_OKTA_SAML2_METADATA_URL = "https://%(okta_org)s/app/%(app_id)s/sso/saml/metadata"
 
 APPLICATION_DEPLOY_TIMEOUT = 900  # 15 minutes
 APPLICATION_REMOVE_TIMEOUT = 300  # 5 minutes
@@ -139,7 +133,7 @@ _QUESTIONS = {
         "entra": _ENTRA_QUESTIONS_SAML2,
         "okta": _OKTA_QUESTIONS_SAML2,
         "generic": _GENERIC_PROVIDER_QUESTIONS_SAML2,
-    }
+    },
 }
 
 _METADATA_URL_MAP = {
@@ -226,6 +220,7 @@ def _safe_get_tfvars(client: Client):
             tfvars["sso-providers"]["saml2"] = {}
     return tfvars
 
+
 def _validate_oidc_config(name: str, idp: dict) -> None:
     """Basic check for openid connect discovery document."""
     issuer_url = idp.get("config", {}).get("issuer_url", None)
@@ -279,7 +274,7 @@ def _validate_saml2_config(name: str, idp: dict) -> None:
 
     chain = config.get("ca-chain", "")
     with tempfile.NamedTemporaryFile() as fd:
-        verify = True
+        verify: bool | str = True
         if chain:
             fd.write(chain)
             fd.flush()
@@ -288,9 +283,9 @@ def _validate_saml2_config(name: str, idp: dict) -> None:
         cfg_req.raise_for_status()
 
     # return the response and remove any potential UTF-8 byte order mark.
-    data = cfg_req.text.lstrip('\ufeff')
-    root = ET.fromstring(data)
-    entity_id = root.attrib['entityID']
+    data = cfg_req.text.lstrip("\ufeff")
+    root = ET.fromstring(data)  # noqa: S314
+    entity_id = root.attrib["entityID"]
     if not entity_id:
         raise ValueError(
             f"xml document does not contain an entityID for idp {name}",
@@ -306,9 +301,7 @@ def _validate_idp(protocol: str, name: str, idp: dict) -> None:
     }
     validate_fn = validator_map.get(protocol, None)
     if not validate_fn:
-        raise click.ClickException(
-            f"Cannot validate protocol {protocol}"
-        )
+        raise click.ClickException(f"Cannot validate protocol {protocol}")
     validate_fn(name, idp)
 
 
@@ -372,10 +365,7 @@ class RemoveExternalProviderStep(BaseStep, JujuStepHelper):
         # Clear answers on delete.
         questions.write_answers(
             self.client,
-            _CONFIG % {
-                "name": self._provider_name,
-                "proto": self._proto
-            },
+            _CONFIG % {"name": self._provider_name, "proto": self._proto},
             {},
         )
         return Result(ResultType.COMPLETED)
@@ -405,14 +395,17 @@ class UpdateExternalProviderStep(BaseStep, JujuStepHelper):
         self._secrets = self._validate_secrets(secrets)
 
     def _update_openid(self, cfg, tfvars):
-        cfg[self._proto][self._provider_name][
-            "config"]["client_id"] = self._secrets["client_id"]
-        cfg[self._proto][self._provider_name][
-            "config"]["client_secret"] = self._secrets["client_secret"]
+        cfg[self._proto][self._provider_name]["config"]["client_id"] = self._secrets[
+            "client_id"
+        ]
+        cfg[self._proto][self._provider_name]["config"]["client_secret"] = (
+            self._secrets["client_secret"]
+        )
         update_config(self.client, SSO_CONFIG_KEY, cfg)
 
-        tfvars["sso-providers"][self._proto][self._provider_name] = cfg[
-            self._proto][self._provider_name]["config"]
+        tfvars["sso-providers"][self._proto][self._provider_name] = cfg[self._proto][
+            self._provider_name
+        ]["config"]
 
         return (cfg, tfvars)
 
@@ -464,18 +457,17 @@ class UpdateExternalProviderStep(BaseStep, JujuStepHelper):
         if not cfg[self._proto].get(self._provider_name, None):
             return Result(
                 ResultType.FAILED,
-                f"Provider {self._provider_name} ({self._proto}) not found")
+                f"Provider {self._provider_name} ({self._proto}) not found",
+            )
 
         provider_type = cfg[self._proto][self._provider_name].get(
-            "provider_type", None,
+            "provider_type",
+            None,
         )
         if not provider_type or provider_type == "canonical":
             return Result(
                 ResultType.FAILED,
-                (
-                    f"Provider {self._provider_name} ({self._proto})"
-                    "cannot be updated"
-                ),
+                (f"Provider {self._provider_name} ({self._proto})cannot be updated"),
             )
 
         if "config" not in cfg[self._proto][self._provider_name]:
@@ -488,8 +480,7 @@ class UpdateExternalProviderStep(BaseStep, JujuStepHelper):
         update_fn = getattr(self, f"_update_{self._proto}", None)
         if not update_fn:
             return Result(
-                ResultType.FAILED,
-                f"No update possible for protocol {self._proto}"
+                ResultType.FAILED, f"No update possible for protocol {self._proto}"
             )
         cfg, tfvars = update_fn(cfg, tfvars)
 
@@ -664,7 +655,8 @@ class _BaseExternalProviderStep(_BaseProviderStep):
             meta_url = _METADATA_URL_MAP[self._proto].get(self.idp_name)
             if not meta_url:
                 raise click.ClickException(
-                    f"cannot compose metadata URL for provider type {self.idp_name}")
+                    f"cannot compose metadata URL for provider type {self.idp_name}"
+                )
             self._config_map[self._proto][key] = meta_url % self._url_params
 
     def _ask_openid(self, q_bank: questions.QuestionBank, variables: dict):
@@ -715,8 +707,7 @@ class _BaseExternalProviderStep(_BaseProviderStep):
         self._set_idp_metadata_url()
         cfg = self._config_map.get(self._proto, {})
         if not cfg:
-            raise click.ClickException(
-                f"No config possible for protocol {self._proto}")
+            raise click.ClickException(f"No config possible for protocol {self._proto}")
 
         if not all(cfg.values()):
             raise click.ClickException("invalid state for provider step")
@@ -728,8 +719,7 @@ class _BaseExternalProviderStep(_BaseProviderStep):
 
         idp = cfg[self._proto].get(self._provider_name, None)
         if idp:
-            cfg[self._proto][self._provider_name][
-                "config"] = self._charm_config
+            cfg[self._proto][self._provider_name]["config"] = self._charm_config
         else:
             cfg[self._proto][self._provider_name] = {
                 "config": self._charm_config,
@@ -866,16 +856,12 @@ class AddGenericProviderStep(_BaseExternalProviderStep):
                 "label": None,
                 "issuer_url": None,
             },
-            "saml2": {
-                "label": None,
-                "metadata_url": None,
-                "ca_chain": ""
-            },
+            "saml2": {"label": None, "metadata_url": None, "ca_chain": ""},
         }
         return preseed[self._proto]
 
     def _ask_openid(self, q_bank: questions.QuestionBank, variables: dict):
-        variables = super()._ask(q_bank, variables)
+        variables = super()._ask_openid(q_bank, variables)
         issuer_url = q_bank.issuer_url.ask()
         if not issuer_url:
             raise click.ClickException("issuer_url is mandatory")
@@ -1004,7 +990,6 @@ class AddCanonicalProviderStep(_BaseProviderStep):
 
 
 class ValidateIdentityManifest(BaseStep):
-
     def __init__(
         self,
         client: Client,
@@ -1026,10 +1011,7 @@ class ValidateIdentityManifest(BaseStep):
             return issuer_url
 
     def _charm_config_openid(
-        self,
-        name: str,
-        provider: str,
-        config: dict[str, str | None]
+        self, name: str, provider: str, config: dict[str, str | None]
     ):
         if not config.get("label"):
             config["label"] = f"Log in with {name}"
@@ -1043,10 +1025,7 @@ class ValidateIdentityManifest(BaseStep):
         }
 
     def _charm_config_saml2(
-        self,
-        name: str,
-        provider: str,
-        config: dict[str, str | None]
+        self, name: str, provider: str, config: dict[str, str | None]
     ):
         if not config.get("label"):
             config["label"] = f"Log in with {name}"
@@ -1059,8 +1038,7 @@ class ValidateIdentityManifest(BaseStep):
                 raise ValueError(f"Invalid provider type {provider}")
             metadata_url = metadata_url_tpl % config
         if not metadata_url:
-            raise ValueError(
-                f"Could not detemine metadata-url for provider {provider}")
+            raise ValueError(f"Could not detemine metadata-url for provider {provider}")
 
         conf = {
             "metadata-url": metadata_url,
@@ -1112,10 +1090,11 @@ class ValidateIdentityManifest(BaseStep):
         questions = _QUESTIONS.get(protocol, {}).get(provider, None)
         if not questions:
             raise click.ClickException(
-                f"Unknown provider type {provider} ({protocol}) for {name}")
+                f"Unknown provider type {provider} ({protocol}) for {name}"
+            )
 
         missing_keys = []
-        norm_config = {}
+        norm_config: dict[str, str | None] = {}
         for key in questions:
             norm_key = key.replace("-", "_")
             cfg_val = config.get(
@@ -1197,16 +1176,14 @@ class ValidateIdentityManifest(BaseStep):
                 if config.provider == "canonical":
                     if config.protocol != "openid":
                         continue
-                    cfg[config.protocol][name][
-                        "config"] = self._canonical_charm_config(
+                    cfg[config.protocol][name]["config"] = self._canonical_charm_config(
                         name,
                         config.provider,
                         config.protocol,
                         config.config,
                     )
                 else:
-                    cfg[config.protocol][name][
-                        "config"] = self._external_charm_config(
+                    cfg[config.protocol][name]["config"] = self._external_charm_config(
                         name,
                         config.provider,
                         config.protocol,
@@ -1278,7 +1255,7 @@ class DeployIdentityProvidersStep(BaseStep, JujuStepHelper):
         cfg = safe_get_sso_config(self.client)
 
         apps = ["keystone", "horizon"]
-        canonical_providers = {
+        canonical_providers: dict[str, dict[str, dict]] = {
             "openid": {},
             # SAML2 is not yet supported by canonical identity platform,
             # but leaving room for later augmentations.
@@ -1289,7 +1266,7 @@ class DeployIdentityProvidersStep(BaseStep, JujuStepHelper):
                 if conf.get("provider_type", None) == "canonical":
                     canonical_providers[proto][provider] = conf
                     continue
-                if 'ca-chain' in conf["config"]:
+                if "ca-chain" in conf["config"]:
                     if not conf["config"]["ca-chain"]:
                         conf["config"].pop("ca-chain", None)
                 tfvars["sso-providers"][proto][provider] = conf["config"]
@@ -1365,7 +1342,7 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
         deployment: Deployment,
         tfhelper: TerraformHelper,
         jhelper: JujuHelper,
-        manifest: Manifest = None,
+        manifest: Manifest | None = None,
         x509_cert: str = "",
         x509_key: str = "",
     ):
@@ -1422,9 +1399,9 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
             return {}
 
         return {
-                "cert": identity.saml2_x509.certificate,
-                "key": identity.saml2_x509.key,
-            }
+            "cert": identity.saml2_x509.certificate,
+            "key": identity.saml2_x509.key,
+        }
 
     def _get_cert_and_key_from_params(self) -> Mapping[str, str]:
         if all([self.x509_cert, self.x509_key]):
@@ -1441,7 +1418,6 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
         Invoked when the step is run and returns a ResultType to indicate
         :return:
         """
-
         cert_and_key = self._get_cert_and_key_from_params()
         try:
             cert_data = open(cert_and_key["cert"]).read()
@@ -1451,7 +1427,8 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
 
         if not cert_and_key_match(cert_data.encode(), key_data.encode()):
             raise ValueError(
-                f"Certificate {cert_and_key["cert"]} is not derived from {cert_and_key["key"]}"
+                f"Certificate {cert_and_key['cert']} is not derived from "
+                f"{cert_and_key['key']}"
             )
 
         try:
@@ -1474,7 +1451,7 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
                 data={
                     "certificate": cert_data,
                     "key": key_data,
-                }
+                },
             )
             saml2_config["saml2_cert_key_secret"] = saml_secret_id
             update_config(self.client, _SAML2_CONFIG_KEY, saml2_config)
@@ -1493,13 +1470,11 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
                 data={
                     "certificate": cert_data,
                     "key": key_data,
-                }
+                },
             )
 
         # Grant secret access to the vault application
-        self.jhelper.grant_secret(
-            OPENSTACK_MODEL, saml_secret_id, "keystone"
-        )
+        self.jhelper.grant_secret(OPENSTACK_MODEL, saml_secret_id, "keystone")
 
         try:
             tfvars = read_config(self.client, CONFIG_KEY)

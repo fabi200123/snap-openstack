@@ -215,7 +215,6 @@ class CoreConfig(pydantic.BaseModel):
             return v
 
     class _Identity(pydantic.BaseModel):
-
         class _IdentitySAML2KeyAndCert(pydantic.BaseModel):
             certificate: str
             key: str

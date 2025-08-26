@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from sunbeam.clusterd.service import ConfigItemNotFoundException
+from sunbeam.core.checks import VerifyBootstrappedCheck, run_preflight_checks
 from sunbeam.core.common import (
     FORMAT_TABLE,
     FORMAT_YAML,
@@ -24,7 +25,6 @@ from sunbeam.core.juju import (
 )
 from sunbeam.core.openstack import OPENSTACK_MODEL
 from sunbeam.core.terraform import TerraformInitStep
-from sunbeam.core.checks import VerifyBootstrappedCheck, run_preflight_checks
 from sunbeam.steps.juju import RemoveSaasApplicationsStep
 from sunbeam.steps.sso import (
     APPLICATION_REMOVE_TIMEOUT,
@@ -36,8 +36,8 @@ from sunbeam.steps.sso import (
     AddGoogleProviderStep,
     AddOktaProviderStep,
     RemoveExternalProviderStep,
-    UpdateExternalProviderStep,
     SetKeystoneSAMLCertAndKeyStep,
+    UpdateExternalProviderStep,
     safe_get_sso_config,
 )
 from sunbeam.utils import click_option_show_hints
@@ -132,9 +132,7 @@ def add_sso(
     deployment: Deployment = ctx.obj
 
     client = deployment.get_client()
-    preflight_checks = [
-        VerifyBootstrappedCheck(client)
-    ]
+    preflight_checks = [VerifyBootstrappedCheck(client)]
     run_preflight_checks(preflight_checks, console)
 
     cfg = safe_get_sso_config(client)
@@ -186,7 +184,7 @@ def add_sso(
     type=click.Choice(
         VALID_SSO_PROTOCOLS,
         case_sensitive=False,
-    )
+    ),
 )
 @click.option(
     "--yes-i-mean-it",
@@ -205,9 +203,7 @@ def remove_sso(
     """Remove an identity provider."""
     deployment: Deployment = ctx.obj
     client = deployment.get_client()
-    preflight_checks = [
-        VerifyBootstrappedCheck(client)
-    ]
+    preflight_checks = [VerifyBootstrappedCheck(client)]
     run_preflight_checks(preflight_checks, console)
     cfg = safe_get_sso_config(client)
 
@@ -270,18 +266,12 @@ def remove_sso(
 @click_option_show_hints
 @click.pass_context
 def update_sso(
-    ctx: click.Context,
-    name: str,
-    protocol: str,
-    secrets_file: str,
-    show_hints: bool
+    ctx: click.Context, name: str, protocol: str, secrets_file: str, show_hints: bool
 ):
     """Update identity provider (openid only)."""
     deployment: Deployment = ctx.obj
     client = deployment.get_client()
-    preflight_checks = [
-        VerifyBootstrappedCheck(client)
-    ]
+    preflight_checks = [VerifyBootstrappedCheck(client)]
     run_preflight_checks(preflight_checks, console)
     try:
         cfg = read_config(client, SSO_CONFIG_KEY)
@@ -361,9 +351,7 @@ def purge_sso(
     deployment: Deployment = ctx.obj
     jhelper = JujuHelper(deployment.juju_controller)
     client = deployment.get_client()
-    preflight_checks = [
-        VerifyBootstrappedCheck(client)
-    ]
+    preflight_checks = [VerifyBootstrappedCheck(client)]
     run_preflight_checks(preflight_checks, console)
 
     config = safe_get_sso_config(client)
@@ -434,9 +422,7 @@ def set_saml_x509(
     jhelper = JujuHelper(deployment.juju_controller)
     client = deployment.get_client()
     tfhelper = deployment.get_tfhelper("openstack-plan")
-    preflight_checks = [
-        VerifyBootstrappedCheck(client)
-    ]
+    preflight_checks = [VerifyBootstrappedCheck(client)]
     run_preflight_checks(preflight_checks, console)
 
     run_plan(
@@ -452,4 +438,5 @@ def set_saml_x509(
             ),
         ],
         console,
-        show_hints)
+        show_hints,
+    )
