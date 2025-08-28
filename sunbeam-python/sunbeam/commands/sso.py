@@ -76,18 +76,27 @@ def list_sso(
             results[proto][provider] = {
                 "type": data.get("provider_type", "unknown"),
                 "protocol": proto,
-                "issuer_url": data.get("config", {}).get("issuer_url", "unknown"),
             }
+            if proto == "openid":
+                results[proto][provider]["remote_id"] = data.get("config", {}).get(
+                    "issuer_url", "unknown"
+                )
+            elif proto == "saml2":
+                results[proto][provider]["remote_id"] = data.get(
+                    "remote_entity_id", "unknown"
+                )
 
     if format == FORMAT_TABLE:
         table = Table()
         table.add_column("Name")
         table.add_column("Provider")
         table.add_column("Protocol")
+        table.add_column("Remote ID")
         table.add_row(
             "Keystone Credentials",
             "Built-in",
             "keystone",
+            "N/A",
         )
         for proto, providers in results.items():
             for provider, data in providers.items():
@@ -95,6 +104,7 @@ def list_sso(
                     provider,
                     data["type"],
                     data["protocol"],
+                    data["remote_id"],
                 )
         console.print(table)
     elif format == FORMAT_YAML:

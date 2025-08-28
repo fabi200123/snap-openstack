@@ -261,17 +261,17 @@ def _validate_oidc_config(name: str, idp: dict) -> None:
         )
 
 
-def _validate_saml2_config(name: str, idp: dict) -> None:
+def _validate_saml2_config(name: str, idp: dict) -> str:
     """Basic check for saml2 metadata URL."""
     config = idp.get("config", {})
     if not config:
         raise ValueError(
-            f"invalid config for IDP {name}",
+            "invalid config for IDP",
         )
     metadata_url = config.get("metadata-url", None)
     if not metadata_url:
         raise ValueError(
-            f"could not find metadata-url for {name}",
+            "could not find metadata-url",
         )
 
     chain = config.get("ca-chain", "")
@@ -287,15 +287,15 @@ def _validate_saml2_config(name: str, idp: dict) -> None:
     # return the response and remove any potential UTF-8 byte order mark.
     data = cfg_req.text.lstrip("\ufeff")
     root = ET.fromstring(data)  # noqa: S314
-    entity_id = root.attrib["entityID"]
+    entity_id = root.attrib.get("entityID", "")
     if not entity_id:
         raise ValueError(
-            f"xml document does not contain an entityID for idp {name}",
+            f"failed to determine entityID for idp {name}",
         )
-    return None
+    return entity_id
 
 
-def _validate_idp(protocol: str, name: str, idp: dict) -> None:
+def _validate_idp(protocol: str, name: str, idp: dict) -> None | str:
     """Basic check for idp configuration options."""
     validator_map = {
         "openid": _validate_oidc_config,
@@ -304,7 +304,8 @@ def _validate_idp(protocol: str, name: str, idp: dict) -> None:
     validate_fn = validator_map.get(protocol, None)
     if not validate_fn:
         raise click.ClickException(f"Cannot validate protocol {protocol}")
-    validate_fn(name, idp)
+    result = validate_fn(name, idp)
+    return result
 
 
 class RemoveExternalProviderStep(BaseStep, JujuStepHelper):
@@ -729,13 +730,16 @@ class _BaseExternalProviderStep(_BaseProviderStep):
             }
 
         try:
-            _validate_idp(
+            entity_id = _validate_idp(
                 self._proto,
                 self._provider_name,
                 cfg[self._proto][self._provider_name],
             )
         except Exception as e:
             return Result(ResultType.FAILED, f"Failed to validate IDP {e}")
+
+        if self._proto == "saml2" and entity_id:
+            cfg[self._proto][self._provider_name]["remote_entity_id"] = entity_id
 
         for proto, providers in cfg.items():
             for provider, data in providers.items():
