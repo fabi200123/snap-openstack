@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2025 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Any
+
 import click
 import yaml
 from rich.console import Console
@@ -64,11 +66,14 @@ def list_sso(
     client = deployment.get_client()
 
     cfg = safe_get_sso_config(client)
-    results = {}
+    results: dict[str, dict[str, Any]] = {
+        "openid": {},
+        "saml2": {},
+    }
 
     for proto, providers in cfg.items():
         for provider, data in providers.items():
-            results[provider] = {
+            results[proto][provider] = {
                 "type": data.get("provider_type", "unknown"),
                 "protocol": proto,
                 "issuer_url": data.get("config", {}).get("issuer_url", "unknown"),
@@ -84,12 +89,13 @@ def list_sso(
             "Built-in",
             "keystone",
         )
-        for provider, data in results.items():
-            table.add_row(
-                provider,
-                data["type"],
-                data["protocol"],
-            )
+        for proto, providers in results.items():
+            for provider, data in providers.items():
+                table.add_row(
+                    provider,
+                    data["type"],
+                    data["protocol"],
+                )
         console.print(table)
     elif format == FORMAT_YAML:
         yaml.add_representer(str, str_presenter)
