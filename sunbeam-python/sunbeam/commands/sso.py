@@ -398,18 +398,8 @@ def purge_sso(
 
 @click.command(name="set-saml-x509")
 @click_option_show_hints
-@click.option(
-    "--certificate",
-    type=str,
-    required=True,
-    help="Path to x509 certificate file.",
-)
-@click.option(
-    "--key",
-    type=str,
-    required=True,
-    help="Path to key file.",
-)
+@click.argument("certificate", type=str)
+@click.argument("key", type=str)
 @click.pass_context
 def set_saml_x509(
     ctx: click.Context,

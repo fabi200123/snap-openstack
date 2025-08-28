@@ -59,7 +59,9 @@ _ENTRA_SAML_METADATA_URL = (
     "https://login.microsoftonline.com/%(microsoft_tenant)s/federationmetadata/2007-06"
     "/federationmetadata.xml?appid=%(app_id)s"
 )
-_OKTA_SAML2_METADATA_URL = "https://%(okta_org)s/app/%(app_id)s/sso/saml/metadata"
+_OKTA_SAML2_METADATA_URL = (
+    "https://%(okta_org)s.okta.com/app/%(app_id)s/sso/saml/metadata"
+)
 
 APPLICATION_DEPLOY_TIMEOUT = 900  # 15 minutes
 APPLICATION_REMOVE_TIMEOUT = 300  # 5 minutes
@@ -1473,7 +1475,7 @@ class SetKeystoneSAMLCertAndKeyStep(BaseStep, JujuStepHelper):
                 },
             )
 
-        # Grant secret access to the vault application
+        # Grant secret access to the keystone application
         self.jhelper.grant_secret(OPENSTACK_MODEL, saml_secret_id, "keystone")
 
         try:
