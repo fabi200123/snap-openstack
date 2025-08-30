@@ -31,6 +31,7 @@ OPENSTACK_CHARMS_K8S = {
     "glance-k8s": OPENSTACK_CHANNEL,
     "horizon-k8s": OPENSTACK_CHANNEL,
     "keystone-k8s": OPENSTACK_CHANNEL,
+    "keystone-saml-k8s": OPENSTACK_CHANNEL,
     "neutron-k8s": OPENSTACK_CHANNEL,
     "nova-k8s": OPENSTACK_CHANNEL,
     "placement-k8s": OPENSTACK_CHANNEL,
