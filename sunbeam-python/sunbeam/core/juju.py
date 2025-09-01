@@ -747,6 +747,16 @@ class JujuHelper:
         with self._model(model) as juju:
             return juju.add_secret(name, data, info=info).unique_identifier
 
+    def update_secret(self, model: str, name: str, data: dict) -> None:
+        """Update secret content in the model.
+
+        :model: Name of the model.
+        :name: Name of the secret.
+        :data: New content for the secret.
+        """
+        with self._model(model) as juju:
+            juju.update_secret(name, data)
+
     def grant_secret(self, model: str, name: str, application: str):
         """Grant secret access to application.
 

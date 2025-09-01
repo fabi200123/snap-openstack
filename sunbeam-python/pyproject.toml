@@ -49,7 +49,7 @@ dependencies = [
     "requests-unixsocket", # Used for communication with snapd socket
     "rich",
     "tenacity",
-    "jubilant>=1.2.0",
+    "jubilant>=1.3.0",
     "packaging>=23.2",
 ]
 

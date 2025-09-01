@@ -1,12 +1,15 @@
 # SPDX-FileCopyrightText: 2025 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Any
+
 import click
 import yaml
 from rich.console import Console
 from rich.table import Table
 
 from sunbeam.clusterd.service import ConfigItemNotFoundException
+from sunbeam.core.checks import VerifyBootstrappedCheck, run_preflight_checks
 from sunbeam.core.common import (
     FORMAT_TABLE,
     FORMAT_YAML,
@@ -28,13 +31,16 @@ from sunbeam.steps.juju import RemoveSaasApplicationsStep
 from sunbeam.steps.sso import (
     APPLICATION_REMOVE_TIMEOUT,
     SSO_CONFIG_KEY,
+    VALID_SSO_PROTOCOLS,
     AddCanonicalProviderStep,
     AddEntraProviderStep,
     AddGenericProviderStep,
     AddGoogleProviderStep,
     AddOktaProviderStep,
     RemoveExternalProviderStep,
+    SetKeystoneSAMLCertAndKeyStep,
     UpdateExternalProviderStep,
+    safe_get_sso_config,
 )
 from sunbeam.utils import click_option_show_hints
 
@@ -59,35 +65,47 @@ def list_sso(
     deployment: Deployment = ctx.obj
     client = deployment.get_client()
 
-    try:
-        cfg = read_config(client, SSO_CONFIG_KEY)
-    except ConfigItemNotFoundException:
-        cfg = {}
+    cfg = safe_get_sso_config(client)
+    results: dict[str, dict[str, Any]] = {
+        "openid": {},
+        "saml2": {},
+    }
 
-    results = {}
-    for k, v in cfg.items():
-        results[k] = {
-            "type": v.get("provider_type", "unknown"),
-            "protocol": v.get("provider_proto", "unknown"),
-            "issuer_url": v.get("config", {}).get("issuer_url", "unknown"),
-        }
+    for proto, providers in cfg.items():
+        for provider, data in providers.items():
+            results[proto][provider] = {
+                "type": data.get("provider_type", "unknown"),
+                "protocol": proto,
+            }
+            if proto == "openid":
+                results[proto][provider]["remote_id"] = data.get("config", {}).get(
+                    "issuer_url", "unknown"
+                )
+            elif proto == "saml2":
+                results[proto][provider]["remote_id"] = data.get(
+                    "remote_entity_id", "unknown"
+                )
 
     if format == FORMAT_TABLE:
         table = Table()
         table.add_column("Name")
         table.add_column("Provider")
         table.add_column("Protocol")
+        table.add_column("Remote ID")
         table.add_row(
             "Keystone Credentials",
             "Built-in",
             "keystone",
+            "N/A",
         )
-        for provider, data in results.items():
-            table.add_row(
-                provider,
-                data["type"],
-                data["protocol"],
-            )
+        for proto, providers in results.items():
+            for provider, data in providers.items():
+                table.add_row(
+                    provider,
+                    data["type"],
+                    data["protocol"],
+                    data["remote_id"],
+                )
         console.print(table)
     elif format == FORMAT_YAML:
         yaml.add_representer(str, str_presenter)
@@ -105,9 +123,7 @@ def list_sso(
 @click.argument(
     "provider-protocol",
     type=click.Choice(
-        [
-            "openid",
-        ],
+        VALID_SSO_PROTOCOLS,
         case_sensitive=False,
     ),
 )
@@ -130,14 +146,14 @@ def add_sso(
 ) -> None:
     """Add a new identity provider."""
     deployment: Deployment = ctx.obj
-    client = deployment.get_client()
-    try:
-        cfg = read_config(client, SSO_CONFIG_KEY)
-    except ConfigItemNotFoundException:
-        cfg = {}
 
-    if name in cfg:
-        click.echo(f"{name} is already enabled.")
+    client = deployment.get_client()
+    preflight_checks = [VerifyBootstrappedCheck(client)]
+    run_preflight_checks(preflight_checks, console)
+
+    cfg = safe_get_sso_config(client)
+    if cfg.get(provider_protocol, {}).get(name, {}):
+        click.echo(f"{name} ({provider_protocol}) is already enabled.")
         return
 
     jhelper = JujuHelper(deployment.juju_controller)
@@ -179,6 +195,13 @@ def add_sso(
 
 @click.command(name="remove")
 @click.argument("name", type=str)
+@click.argument(
+    "protocol",
+    type=click.Choice(
+        VALID_SSO_PROTOCOLS,
+        case_sensitive=False,
+    ),
+)
 @click.option(
     "--yes-i-mean-it",
     is_flag=True,
@@ -186,16 +209,21 @@ def add_sso(
 )
 @click_option_show_hints
 @click.pass_context
-def remove_sso(ctx: click.Context, name: str, yes_i_mean_it: bool, show_hints: bool):
+def remove_sso(
+    ctx: click.Context,
+    name: str,
+    protocol: str,
+    yes_i_mean_it: bool,
+    show_hints: bool,
+):
     """Remove an identity provider."""
     deployment: Deployment = ctx.obj
     client = deployment.get_client()
-    try:
-        cfg = read_config(client, SSO_CONFIG_KEY)
-    except ConfigItemNotFoundException:
-        cfg = {}
+    preflight_checks = [VerifyBootstrappedCheck(client)]
+    run_preflight_checks(preflight_checks, console)
+    cfg = safe_get_sso_config(client)
 
-    provider = cfg.get(name)
+    provider = cfg.get(protocol, {}).get(name)
     if not provider:
         click.echo(f"{name} does not exist.")
         return
@@ -225,6 +253,7 @@ def remove_sso(ctx: click.Context, name: str, yes_i_mean_it: bool, show_hints: b
                 deployment=deployment,
                 jhelper=jhelper,
                 provider_name=name,
+                provider_proto=protocol,
             )
         )
 
@@ -237,6 +266,13 @@ def remove_sso(ctx: click.Context, name: str, yes_i_mean_it: bool, show_hints: b
 
 @click.command(name="update")
 @click.argument("name", type=str)
+@click.argument(
+    "protocol",
+    type=click.Choice(
+        VALID_SSO_PROTOCOLS,
+        case_sensitive=False,
+    ),
+)
 @click.option(
     "--secrets-file",
     type=str,
@@ -245,17 +281,24 @@ def remove_sso(ctx: click.Context, name: str, yes_i_mean_it: bool, show_hints: b
 )
 @click_option_show_hints
 @click.pass_context
-def update_sso(ctx: click.Context, name: str, secrets_file: str, show_hints: bool):
-    """Update identity provider."""
+def update_sso(
+    ctx: click.Context, name: str, protocol: str, secrets_file: str, show_hints: bool
+):
+    """Update identity provider (openid only)."""
     deployment: Deployment = ctx.obj
     client = deployment.get_client()
+    preflight_checks = [VerifyBootstrappedCheck(client)]
+    run_preflight_checks(preflight_checks, console)
     try:
         cfg = read_config(client, SSO_CONFIG_KEY)
     except ConfigItemNotFoundException:
-        cfg = {}
+        cfg = {
+            "openid": {},
+            "saml2": {},
+        }
 
-    if name not in cfg:
-        click.echo(f"{name} does not exist.")
+    if name not in cfg.get(protocol, {}):
+        click.echo(f"{name} with protocol {protocol} does not exist.")
         return
 
     secrets: dict[str, str] = {}
@@ -272,11 +315,12 @@ def update_sso(ctx: click.Context, name: str, secrets_file: str, show_hints: boo
             deployment=deployment,
             jhelper=jhelper,
             provider_name=name,
+            provider_proto=protocol,
             secrets=secrets,
         ),
     ]
     run_plan(plan, console, show_hints)
-    click.echo(f"{name} updated.")
+    click.echo(f"{name} ({protocol}) updated.")
 
 
 @click.command(name="get-oidc-redirect-url")
@@ -323,12 +367,11 @@ def purge_sso(
     deployment: Deployment = ctx.obj
     jhelper = JujuHelper(deployment.juju_controller)
     client = deployment.get_client()
-    try:
-        config = read_config(client, SSO_CONFIG_KEY)
-    except ConfigItemNotFoundException:
-        config = {}
+    preflight_checks = [VerifyBootstrappedCheck(client)]
+    run_preflight_checks(preflight_checks, console)
 
-    if not yes_i_mean_it and config:
+    config = safe_get_sso_config(client)
+    if not yes_i_mean_it and any(config.values()):
         msg = (
             "You have one or more identity providers enabled. "
             "This action will remove all of them. Are you sure?"
@@ -340,18 +383,20 @@ def purge_sso(
         TerraformInitStep(tfhelper),
     ]
     saas_to_remove = []
-    for provider, cfg in config.items():
-        if cfg.get("provider_type", None) == "canonical":
-            saas_to_remove.append(provider)
-            saas_to_remove.append(f"{provider}-cert")
-        else:
-            remove_idp_plan.append(
-                RemoveExternalProviderStep(
-                    deployment=deployment,
-                    jhelper=jhelper,
-                    provider_name=provider,
+    for proto, section in config.items():
+        for provider, cfg in section.items():
+            if cfg.get("provider_type", None) == "canonical":
+                saas_to_remove.append(provider)
+                saas_to_remove.append(f"{provider}-cert")
+            else:
+                remove_idp_plan.append(
+                    RemoveExternalProviderStep(
+                        deployment=deployment,
+                        jhelper=jhelper,
+                        provider_name=provider,
+                        provider_proto=proto,
+                    )
                 )
-            )
 
     if saas_to_remove:
         remove_idp_plan.append(
@@ -365,3 +410,39 @@ def purge_sso(
         )
     run_plan(remove_idp_plan, console, show_hints)
     update_config(client, SSO_CONFIG_KEY, {})
+
+
+@click.command(name="set-saml-x509")
+@click_option_show_hints
+@click.argument("certificate", type=str)
+@click.argument("key", type=str)
+@click.pass_context
+def set_saml_x509(
+    ctx: click.Context,
+    show_hints: bool,
+    certificate: str,
+    key: str,
+) -> None:
+    """Set Keystone SAML x509 SP certificate and key."""
+    deployment: Deployment = ctx.obj
+    jhelper = JujuHelper(deployment.juju_controller)
+    client = deployment.get_client()
+    tfhelper = deployment.get_tfhelper("openstack-plan")
+    preflight_checks = [VerifyBootstrappedCheck(client)]
+    run_preflight_checks(preflight_checks, console)
+
+    run_plan(
+        [
+            TerraformInitStep(deployment.get_tfhelper("openstack-plan")),
+            SetKeystoneSAMLCertAndKeyStep(
+                deployment,
+                tfhelper,
+                jhelper,
+                None,
+                certificate,
+                key,
+            ),
+        ],
+        console,
+        show_hints,
+    )

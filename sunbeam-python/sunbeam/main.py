@@ -119,6 +119,9 @@ def main():
 
     # Add identity group and commands
     identity_group.add_command(provider_group)
+    identity_group.add_command(sso_cmd.set_saml_x509)
+
+    # Add provider commands
     provider_group.add_command(sso_cmd.list_sso)
     provider_group.add_command(sso_cmd.add_sso)
     provider_group.add_command(sso_cmd.remove_sso)

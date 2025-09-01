@@ -164,6 +164,7 @@ from sunbeam.steps.openstack import (
 )
 from sunbeam.steps.sso import (
     DeployIdentityProvidersStep,
+    SetKeystoneSAMLCertAndKeyStep,
     ValidateIdentityManifest,
 )
 from sunbeam.steps.sunbeam_machine import (
@@ -824,6 +825,14 @@ def bootstrap(
                 topology,
                 deployment.openstack_machines_model,
                 proxy_settings=proxy_settings,
+            )
+        )
+        plan1.append(
+            SetKeystoneSAMLCertAndKeyStep(
+                deployment=deployment,
+                tfhelper=openstack_tfhelper,
+                jhelper=jhelper,
+                manifest=manifest,
             )
         )
         plan1.append(
