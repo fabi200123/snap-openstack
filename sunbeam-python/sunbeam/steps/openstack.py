@@ -456,7 +456,7 @@ class DeployControlPlaneStep(BaseStep, JujuStepHelper):
                     f"Application status for {app_name}: {app.app_status.current}"
                 )
                 if app.app_status.current != "active":
-                    apps_to_remove.append(app)
+                    apps_to_remove.append(app_name)
             except ApplicationNotFoundException:
                 pass
 
