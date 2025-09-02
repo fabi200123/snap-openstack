@@ -796,9 +796,26 @@ class JujuHelper:
         """Get secret from model.
 
         :model: Name of the model
-        :secret_id: Secret Name
+        :secret_name: Secret Name
         """
         return self.get_secret(model, secret_name)
+
+    def get_secret_id(self, model: str, secret_name: str) -> str:
+        """Get secret uri from the secret name.
+
+        :model: Name of the model
+        : secret_name: Secret Name
+        """
+        with self._model(model) as juju:
+            try:
+                secret = juju.show_secret(secret_name)
+                return secret.uri.unique_identifier
+            except jubilant.CLIError as e:
+                if "not found" in e.stderr:
+                    raise JujuSecretNotFound(f"Secret {secret_name!r} not found") from e
+                raise JujuException(
+                    f"Failed to get secret {secret_name!r} from model {model!r}"
+                ) from e
 
     def remove_secret(self, model: str, name: str):
         """Remove secret in the model.
@@ -807,7 +824,12 @@ class JujuHelper:
         :name: Name of the secret.
         """
         with self._model(model) as juju:
-            juju.cli("remove-secret", name)
+            try:
+                juju.cli("remove-secret", name)
+            except jubilant.CLIError as e:
+                raise JujuException(
+                    f"Failed to remove secret {name!r} from model {model!r}"
+                ) from e
 
     def get_app_config(self, app: str, model: str) -> Mapping:
         """Get the config vaule for an application.
