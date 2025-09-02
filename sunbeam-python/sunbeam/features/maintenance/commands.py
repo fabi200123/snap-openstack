@@ -108,6 +108,7 @@ class EnableMaintenance(MaintenanceCommand):
         cluster_status: dict[str, Any],
         force: bool = False,
         stop_osds: bool = False,
+        allow_downtime: bool = False,
         enable_ceph_crush_rebalancing: bool = False,
     ):
         self.node = node
@@ -115,6 +116,7 @@ class EnableMaintenance(MaintenanceCommand):
         self.cluster_status = cluster_status
         self.force = force
         self.stop_osds = stop_osds
+        self.allow_downtime = allow_downtime
         self.enable_ceph_crush_rebalancing = enable_ceph_crush_rebalancing
 
         self.model = deployment.openstack_machines_model
@@ -174,6 +176,11 @@ class EnableMaintenance(MaintenanceCommand):
                 checks.NoJujuControllerPodCheck(
                     self.node,
                     self.deployment,
+                ),
+                checks.ReplicasRedundancyCheck(
+                    self.node,
+                    self.deployment,
+                    force=self.allow_downtime,
                 ),
             ]
 
@@ -573,6 +580,17 @@ class DisableMaintenance(MaintenanceCommand):
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--allow-downtime",
+    help=(
+        "Optional to drain the workload that has less than or equal to 1 replica"
+        " even though it might cause service downtime."
+        " Defaults to not allow service down time when"
+        " entering maintenance mode."
+    ),
+    is_flag=True,
+    default=False,
+)
 @click_option_show_hints
 @pass_method_obj
 def enable(
@@ -583,6 +601,7 @@ def enable(
     dry_run,
     enable_ceph_crush_rebalancing,
     stop_osds,
+    allow_downtime,
     show_hints: bool = False,
 ) -> None:
     """Enable maintenance mode for node."""
@@ -599,6 +618,7 @@ def enable(
         cluster_status,
         force=force,
         stop_osds=stop_osds,
+        allow_downtime=allow_downtime,
         enable_ceph_crush_rebalancing=enable_ceph_crush_rebalancing,
     )
 
