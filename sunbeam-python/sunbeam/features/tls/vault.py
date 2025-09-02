@@ -36,7 +36,7 @@ from sunbeam.core.juju import (
     LeaderNotFoundException,
 )
 from sunbeam.core.manifest import AddManifestStep, FeatureConfig
-from sunbeam.core.openstack import OPENSTACK_MODEL
+from sunbeam.core.openstack import ENDPOINTS_CONFIG_KEY, OPENSTACK_MODEL
 from sunbeam.features.interface.utils import (
     encode_base64_as_string,
     get_subject_from_csr,
@@ -57,7 +57,6 @@ from sunbeam.features.tls.common import (
     get_outstanding_certificate_requests,
 )
 from sunbeam.features.vault.feature import VaultCommandFailedException, VaultHelper
-from sunbeam.steps.k8s import TRAEFIK_CONFIG_KEY
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 
 CERTIFICATE_FEATURE_KEY = "TlsProvider"
@@ -265,24 +264,16 @@ class VaultTlsFeature(TlsFeature):
         missing: list[str] = []
 
         try:
-            traefik_vars = read_config(self.client, TRAEFIK_CONFIG_KEY)
-            traefik_endpoints = traefik_vars.get("traefik-endpoints", {})
+            endpoints_config = read_config(self.client, ENDPOINTS_CONFIG_KEY)
         except ConfigItemNotFoundException:
             raise click.ClickException(
                 "Traefik endpoint hostnames are not configured in Sunbeam. "
                 "Please configure them before proceeding."
             )
 
-        endpoint_key_map = {
-            "public": "traefik-public",
-            "internal": "traefik",
-            "rgw": "traefik-rgw",
-        }
-
         for ep in endpoints:
-            endpoint_key = endpoint_key_map[ep]
-            hostname = traefik_endpoints.get(endpoint_key)
-            if hostname:
+            endpoint_config = endpoints_config.get("ingress-" + ep) or {}
+            if hostname := endpoint_config.get("hostname"):
                 external[ep] = hostname
             else:
                 missing.append(ep)
@@ -622,26 +613,19 @@ class VaultTlsFeature(TlsFeature):
             )
 
         try:
-            tfvars = read_config(self.client, TRAEFIK_CONFIG_KEY)
-            saved = tfvars.get("traefik-endpoints", {})
+            endpoints_config = read_config(self.client, ENDPOINTS_CONFIG_KEY)
         except ConfigItemNotFoundException:
             raise click.ClickException(
                 "Traefik endpoint hostnames are not configured in Sunbeam. "
                 "Please configure them using the bootstrap prompts."
             )
 
-        key_map = {
-            "public": "traefik-public",
-            "internal": "traefik",
-            "rgw": "traefik-rgw",
-        }
         external: dict[str, str] = {}
         missing: list[str] = []
         for ep in config.endpoints:
-            k = key_map[ep]
-            h = saved.get(k, "").strip()
-            if h:
-                external[ep] = h
+            endpoint_config = endpoints_config.get("ingress-" + ep) or {}
+            if hostname := endpoint_config.get("hostname"):
+                external[ep] = hostname
             else:
                 missing.append(ep)
 
@@ -661,5 +645,5 @@ class VaultTlsFeature(TlsFeature):
                 found: {', '.join(external.values())}"
             )
         common_domain = domains.pop()
-        tfvars.update({"vault-config": {"common_name": common_domain}})
+        endpoints_config.update({"vault-config": {"common_name": common_domain}})
         console.print(f"Set {CA_APP_NAME}.common_name = {common_domain}")

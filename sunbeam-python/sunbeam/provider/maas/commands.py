@@ -91,6 +91,7 @@ from sunbeam.provider.maas.steps import (
     MaasDeployInfraMachinesStep,
     MaasDeployK8SApplicationStep,
     MaasDeployMachinesStep,
+    MaasEndpointsConfigurationStep,
     MaasRemoveDeploymentCredentialsStep,
     MaasRemoveMachineFromClusterdStep,
     MaasSaveClusterdCredentialsStep,
@@ -745,6 +746,15 @@ def deploy(
             jhelper,
             deployment.openstack_machines_model,
             tfhelper_openstack_deploy,
+        )
+    )
+    plan2.append(
+        MaasEndpointsConfigurationStep(
+            deployment,
+            client,
+            maas_client,
+            manifest,
+            accept_defaults=accept_defaults,
         )
     )
     plan2.append(

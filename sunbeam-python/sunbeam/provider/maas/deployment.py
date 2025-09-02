@@ -16,11 +16,16 @@ from sunbeam.commands.configure import (
 from sunbeam.commands.proxy import proxy_questions
 from sunbeam.core.deployment import PROXY_CONFIG_KEY, Deployment, Networks
 from sunbeam.core.k8s import K8SHelper
-from sunbeam.core.openstack import REGION_CONFIG_KEY
+from sunbeam.core.openstack import (
+    ENDPOINTS_CONFIG_KEY,
+    REGION_CONFIG_KEY,
+    generate_endpoint_preseed_questions,
+)
 from sunbeam.core.questions import Question, QuestionBank, load_answers, show_questions
 from sunbeam.steps.openstack import (
     TOPOLOGY_KEY,
     database_topology_questions,
+    endpoint_questions,
     region_questions,
 )
 
@@ -186,8 +191,7 @@ class MaasDeployment(Deployment):
 
         maas_client = MaasClient.from_deployment(self)
 
-        preseed_content = ["deployment:"]
-
+        preseed_content = ["core:", "  config:"]
         variables = {}
         try:
             if client is not None:
@@ -264,6 +268,17 @@ class MaasDeployment(Deployment):
                 section_description="Remote Access",
                 comment_out=True,
             )
+        )
+
+        variables = {}
+        try:
+            if client is not None:
+                variables = load_answers(client, ENDPOINTS_CONFIG_KEY)
+        except ClusterServiceUnavailableException:
+            pass
+
+        preseed_content.extend(
+            generate_endpoint_preseed_questions(endpoint_questions, console, variables)
         )
 
         preseed_content.extend(

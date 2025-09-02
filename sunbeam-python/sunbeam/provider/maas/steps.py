@@ -41,6 +41,7 @@ from sunbeam.core.common import (
     BaseStep,
     Result,
     ResultType,
+    parse_ip_range,
 )
 from sunbeam.core.deployment import CertPair, Networks
 from sunbeam.core.deployments import DeploymentsConfig
@@ -67,6 +68,7 @@ from sunbeam.steps.juju import (
     SaveControllerStep,
     ScaleJujuStep,
 )
+from sunbeam.steps.openstack import EndpointsConfigurationStep
 from sunbeam.versions import JUJU_BASE
 
 if typing.TYPE_CHECKING:
@@ -1740,6 +1742,42 @@ class MaasConfigureMicrocephOSDStep(BaseStep):
         return Result(ResultType.COMPLETED)
 
 
+def _to_joined_range(subnet_ranges: dict[str, list[dict]], label: str) -> str:
+    """Convert a list of ip ranges to a string for cni config.
+
+    Current cni config format is: <ip start>-<ip end>,<ip start>-<ip end>,...
+    """
+    lb_range = []
+    for ip_ranges in subnet_ranges.values():
+        for ip_range in ip_ranges:
+            if ip_range["label"] == label:
+                lb_range.append(f"{ip_range['start']}-{ip_range['end']}")
+    if len(lb_range) == 0:
+        raise ValueError("No ip range found for label: " + label)
+    return ",".join(lb_range)
+
+
+def get_space_api_range(
+    client: maas_client.MaasClient,
+    space: str,
+    api_label: str,
+) -> str:
+    """Get the API range for a specific space."""
+    try:
+        ranges = maas_client.get_ip_ranges_from_space(client, space)
+        LOG.debug("Public ip ranges: %r", ranges)
+    except ValueError as e:
+        raise ValueError(f"Failed to find ip ranges for space: {space!r}") from e
+    try:
+        parsed_ranges = _to_joined_range(ranges, api_label)
+        LOG.debug("Parsed range: %r", parsed_ranges)
+    except ValueError as e:
+        raise ValueError(
+            f"Failed to find public ip range for label: {api_label!r}",
+        ) from e
+    return parsed_ranges
+
+
 class MaasDeployK8SApplicationStep(k8s.DeployK8SApplicationStep):
     """Deploy K8S application using Terraform."""
 
@@ -1788,72 +1826,37 @@ class MaasDeployK8SApplicationStep(k8s.DeployK8SApplicationStep):
         """
         return False
 
-    def _to_joined_range(self, subnet_ranges: dict[str, list[dict]], label: str) -> str:
-        """Convert a list of ip ranges to a string for cni config.
-
-        Current cni config format is: <ip start>-<ip end>,<ip  start>-<ip end>,...
-        """
-        lb_range = []
-        for ip_ranges in subnet_ranges.values():
-            for ip_range in ip_ranges:
-                if ip_range["label"] == label:
-                    lb_range.append(f"{ip_range['start']}-{ip_range['end']}")
-        if len(lb_range) == 0:
-            raise ValueError("No ip range found for label: " + label)
-        return ",".join(lb_range)
-
     def _get_loadbalancer_range(self) -> str | None:
         """Return loadbalancer range from public space."""
         return self.ranges
 
     def is_skip(self, status: Status | None = None):
         """Determines if the step should be skipped or not."""
-        public_space = self.deployment.get_space(Networks.PUBLIC)
         internal_space = self.deployment.get_space(Networks.INTERNAL)
+        public_space = self.deployment.get_space(Networks.PUBLIC)
         try:
-            public_ranges = maas_client.get_ip_ranges_from_space(
-                self.maas_client, public_space
+            _ = get_space_api_range(
+                self.maas_client, public_space, self.deployment.public_api_label
             )
-            LOG.debug("Public ip ranges: %r", public_ranges)
         except ValueError as e:
             LOG.debug(
-                "Failed to find ip ranges for space: %r", public_space, exc_info=True
+                "Failed to get API range for public space: %r",
+                public_space,
+                exc_info=True,
             )
             return Result(ResultType.FAILED, str(e))
         try:
-            self._to_joined_range(public_ranges, self.deployment.public_api_label)
-        except ValueError:
-            LOG.debug(
-                "No iprange with label %r found",
-                self.deployment.public_api_label,
-                exc_info=True,
+            internal_range = get_space_api_range(
+                self.maas_client, internal_space, self.deployment.internal_api_label
             )
-            return Result(ResultType.FAILED, "No public ip range found")
-
-        try:
-            internal_ranges = maas_client.get_ip_ranges_from_space(
-                self.maas_client, internal_space
-            )
-            LOG.debug("Internal ip ranges: %r", internal_ranges)
         except ValueError as e:
             LOG.debug(
-                "Failed to ip ranges for space: %r", internal_space, exc_info=True
-            )
-            return Result(ResultType.FAILED, str(e))
-        try:
-            # TODO(gboutry): use this range when cni (or sunbeam) easily supports
-            # using different ip pools
-            internal_metallb_range = self._to_joined_range(  # noqa
-                internal_ranges, self.deployment.internal_api_label
-            )
-        except ValueError:
-            LOG.debug(
-                "No iprange with label %r found",
-                self.deployment.internal_api_label,
+                "Failed to get API range for internal space: %r",
+                internal_space,
                 exc_info=True,
             )
-            return Result(ResultType.FAILED, "No internal ip range found")
-        self.ranges = internal_metallb_range
+            return Result(ResultType.FAILED, str(e))
+        self.ranges = internal_range
 
         return super().is_skip(status)
 
@@ -2297,3 +2300,83 @@ class MaasConfigSRIOVStep(BaseStep):
                 return Result(ResultType.FAILED, msg)
 
         return Result(ResultType.COMPLETED)
+
+
+class MaasEndpointsConfigurationStep(EndpointsConfigurationStep):
+    """Configuration endpoints for local provider."""
+
+    def __init__(
+        self,
+        deployment: maas_deployment.MaasDeployment,
+        client: Client,
+        m_client: maas_client.MaasClient,
+        manifest: Manifest | None = None,
+        accept_defaults: bool = False,
+    ):
+        super().__init__(client, manifest, accept_defaults)
+        self.deployment = deployment
+        self.maas_client = m_client
+        self.internal_range = None
+        self.public_range = None
+
+    # TODO(gboutry): Typing unhappy while it should be.
+    @typing.no_type_check
+    def _internal_loadbalancer_range(self) -> list[str]:
+        """Load the load balancer range."""
+        if not self.internal_range:
+            self.internal_range = get_space_api_range(
+                self.maas_client,
+                self.deployment.get_space(Networks.INTERNAL),
+                self.deployment.internal_api_label,
+            ).split(",")
+        return self.internal_range
+
+    @typing.no_type_check
+    def _public_loadbalancer_range(self) -> list[str]:
+        """Load the public load balancer range."""
+        if not self.public_range:
+            self.public_range = get_space_api_range(
+                self.maas_client,
+                self.deployment.get_space(Networks.PUBLIC),
+                self.deployment.public_api_label,
+            ).split(",")
+        return self.public_range
+
+    def _validate_endpoint(self, endpoint: str, ip: str) -> bool:
+        """Let's validate the endpoint."""
+        ip_address = ipaddress.ip_address(ip)
+        if endpoint in ("public", "rgw"):
+            ip_ranges = self._public_loadbalancer_range()
+        else:
+            ip_ranges = self._internal_loadbalancer_range()
+
+        for ip_range in ip_ranges:
+            start_ip, end_ip = parse_ip_range(ip_range)
+            # Check if all IP versions match
+            if (
+                ip_address.version != start_ip.version
+                or start_ip.version != end_ip.version
+            ):
+                LOG.debug(
+                    "IP version mismatch in range: ip=%s (v%d) vs range=%s-%s "
+                    "(v%d-v%d)",
+                    ip_address,
+                    ip_address.version,
+                    start_ip,
+                    end_ip,
+                    start_ip.version,
+                    end_ip.version,
+                )
+                continue
+
+            is_in_range = start_ip <= ip_address <= end_ip  # type: ignore
+            LOG.debug(
+                "IP %s %s in loadbalancer range %s-%s",
+                ip_address,
+                "is" if is_in_range else "is not",
+                start_ip,
+                end_ip,
+            )
+            if is_in_range:
+                return True
+        return False

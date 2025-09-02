@@ -78,6 +78,7 @@ from sunbeam.provider.local.deployment import LOCAL_TYPE, LocalDeployment
 from sunbeam.provider.local.steps import (
     LocalClusterStatusStep,
     LocalConfigSRIOVStep,
+    LocalEndpointsConfigurationStep,
     LocalSetHypervisorUnitsOptionsStep,
 )
 from sunbeam.steps import cluster_status
@@ -816,6 +817,13 @@ def bootstrap(
         )
 
     if is_control_node:
+        plan1.append(
+            LocalEndpointsConfigurationStep(
+                client,
+                manifest,
+                accept_defaults=accept_defaults,
+            )
+        )
         plan1.append(
             DeployControlPlaneStep(
                 deployment,
