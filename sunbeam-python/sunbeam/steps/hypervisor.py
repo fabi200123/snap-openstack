@@ -434,12 +434,14 @@ class ReapplyHypervisorTerraformPlanStep(BaseStep):
         except TerraformException as e:
             return Result(ResultType.FAILED, str(e))
 
+        # Wait for more time since parallel node joins will take time
+        # for openstack-hypervisor application to get settled
         try:
             self.jhelper.wait_application_ready(
                 APPLICATION,
                 self.model,
                 accepted_status=statuses,
-                timeout=HYPERVISOR_APP_TIMEOUT,
+                timeout=HYPERVISOR_UNIT_TIMEOUT,
             )
         except TimeoutError as e:
             LOG.warning(str(e))
