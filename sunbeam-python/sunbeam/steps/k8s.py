@@ -56,6 +56,7 @@ from sunbeam.core.k8s import (
     fetch_pods,
     fetch_pods_for_eviction,
     find_node,
+    list_nodes,
     uncordon,
 )
 from sunbeam.core.manifest import Manifest
@@ -388,12 +389,29 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
             management_networks,
         )
 
+    @tenacity.retry(
+        wait=tenacity.wait_fixed(30),
+        stop=tenacity.stop_after_delay(600),
+        retry=tenacity.retry_if_exception_type(ValueError),
+        reraise=True,
+    )
     def _find_matching_k8s_node(
         self,
-        k8s_nodes: list["core_v1.Node"],
         hostname: str,
         ips: list[str],
-    ) -> "core_v1.Node | None":
+    ) -> "core_v1.Node":
+        """Return matching k8s node.
+
+        Match k8s node with the hostname and IP.
+        Raises ValueError if no match for k8s node.
+
+        Raises K8SError if client not able to get nodes
+        from k8s.
+        """
+        k8s_nodes = list_nodes(
+            self.kube, labels={DEPLOYMENT_LABEL: self.deployment.name}
+        )
+
         for k8s_node in k8s_nodes:
             if k8s_node.metadata is None:
                 LOG.debug("K8S node has no metadata, %s", k8s_node)
@@ -419,12 +437,12 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
                     if address.type == "Hostname":
                         if address.address == hostname:
                             return k8s_node
-        return None
+
+        raise ValueError("No K8s node matched")
 
     def _get_k8s_node_to_update(
         self,
         nodes: list[dict],
-        k8s_nodes: list["core_v1.Node"],
         machines: dict[str, "jubilant.statustypes.MachineStatus"],
     ) -> dict[str, str]:
         to_update = {}
@@ -441,16 +459,20 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
             if not management_ips:
                 LOG.debug("No management IPs found for machine %s", machine_id)
                 raise SunbeamException(f"{sunbeam_name!r} has no management IPs")
-            k8s_node = self._find_matching_k8s_node(
-                k8s_nodes, sunbeam_name, management_ips
-            )
-            if not k8s_node:
+
+            try:
+                k8s_node = self._find_matching_k8s_node(sunbeam_name, management_ips)
+            except ValueError:
                 LOG.debug(
                     "No matching k8s node found for %s, management IPs %s",
                     sunbeam_name,
                     management_ips,
                 )
                 raise SunbeamException(f"{sunbeam_name} has no matching k8s node")
+            except K8SError as e:
+                LOG.debug("Failed to fetch k8s nodes", exc_info=True)
+                raise SunbeamException("Failed to list nodes from K8S") from e
+
             if not k8s_node.metadata:
                 LOG.debug("K8S node %s has no metadata", sunbeam_name)
                 continue
@@ -485,26 +507,10 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
             LOG.debug("Failed to create k8s client", exc_info=True)
             return Result(ResultType.FAILED, str(e))
 
-        try:
-            k8s_nodes = list(
-                self.kube.list(
-                    core_v1.Node,
-                    labels={DEPLOYMENT_LABEL: self.deployment.name},
-                )
-            )
-        except l_exceptions.ApiError:
-            LOG.debug("Failed to fetch k8s nodes", exc_info=True)
-            return Result(
-                ResultType.FAILED,
-                "Failed to get nodes",
-            )
-
         machines = self.jhelper.get_machines(self.model)
 
         try:
-            self.to_update = self._get_k8s_node_to_update(
-                control_nodes, k8s_nodes, machines
-            )
+            self.to_update = self._get_k8s_node_to_update(control_nodes, machines)
         except SunbeamException:
             LOG.debug("Failed to get k8s nodes to update", exc_info=True)
             return Result(
