@@ -168,6 +168,14 @@ class K8SHelper:
         )
 
 
+def list_nodes(client: "l_client.Client", labels: dict) -> list["core_v1.Node"]:
+    """List all the nodes."""
+    try:
+        return list(client.list(core_v1.Node, labels=labels))
+    except l_exceptions.ApiError as e:
+        raise K8SError("Failed to list nodes") from e
+
+
 def find_node(client: "l_client.Client", name: str) -> "core_v1.Node":
     """Find a node by name."""
     try:

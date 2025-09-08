@@ -776,6 +776,18 @@ class TestEnsureK8SUnitsTaggedStep(unittest.TestCase):
         self.client.cluster.list_nodes_by_role.return_value = [
             {"name": "node1", "machineid": "1"}
         ]
+        self.jhelper.get_machines.return_value = {
+            "1": Mock(
+                network_interfaces={
+                    "eth0": Mock(space="management", ip_addresses=["10.0.0.1"])
+                }
+            ),
+            "2": Mock(
+                network_interfaces={
+                    "eth0": Mock(space="management", ip_addresses=["10.0.0.2"])
+                }
+            ),
+        }
         api_error = ApiError.__new__(ApiError)
         api_error.status = Mock(code=500)
         self.kube.list.side_effect = api_error
