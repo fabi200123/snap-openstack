@@ -713,7 +713,9 @@ class LocalConfigDPDKStep(BaseConfigDPDKStep):
             nic_str_repr = nic_utils.get_nic_str_repr(nic)
             question = f"Enable interface DPDK mode? {nic_str_repr}"
             enable_dpdk = sunbeam.core.questions.ConfirmQuestion(
-                question, default_value=(nic["name"] in previous_nics)
+                question,
+                default_value=(nic["name"] in previous_nics),
+                accept_defaults=self.accept_defaults,
             ).ask()
             if enable_dpdk:
                 enabled_nic_names.append(nic["name"])
