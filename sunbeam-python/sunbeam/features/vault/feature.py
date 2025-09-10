@@ -65,7 +65,7 @@ from sunbeam.versions import VAULT_CHANNEL
 
 VAULT_COMMAND_TIMEOUT = 300  # 5 minutes
 VAULT_CHARM_UPDATES_TIMEOUT = (
-    360  # 6 minutes, slightly greater than update-status interval
+    600  # 10 minutes, note that charm status get updated on update-status interval
 )
 VAULT_APPLICATION_NAME = "vault"
 VAULT_CONTAINER_NAME = "vault"
