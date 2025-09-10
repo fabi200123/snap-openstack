@@ -185,7 +185,7 @@ def dpdk_questions():
         ),
         "datapath_cores": sunbeam.core.questions.PromptQuestion(
             "The number of cores allocated to OVS datapath processing",
-            default_value=0,
+            default_value="1",
             description=(
                 "The specified number of cores will be allocated to OVS datapath "
                 "processing, taking into account the NUMA location of physical "
@@ -195,7 +195,7 @@ def dpdk_questions():
         ),
         "control_plane_cores": sunbeam.core.questions.PromptQuestion(
             "The number of cores allocated to OVS control plane processing",
-            default_value=0,
+            default_value="1",
             description=(
                 "The specified number of cores will be allocated to OVS control "
                 "plane processing, taking into account the NUMA location of physical "
@@ -205,7 +205,7 @@ def dpdk_questions():
         ),
         "memory": sunbeam.core.questions.PromptQuestion(
             "The amount of memory in MB allocated to OVS from huge pages",
-            default_value=0,
+            default_value="1024",
             description=(
                 "The total amount of memory in MB to allocate from huge pages for OVS "
                 "DPDK. The memory will be distributed across NUMA nodes based on the "
