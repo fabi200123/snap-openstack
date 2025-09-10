@@ -113,6 +113,7 @@ class Question(typing.Generic[T]):
         password: bool = False,
         validation_function: Callable[[T], None] | None = None,
         description: str | None = None,
+        accept_defaults: bool = False,
     ):
         """Setup question.
 
@@ -126,6 +127,7 @@ class Question(typing.Generic[T]):
         :param validation_function: A function to use to validate the answer,
                                     must raise ValueError when value is invalid.
         :param description: A description of the question, displayed when asking.
+        :param accept_defaults: Use the default and suppress the question.
         """
         self.preseed = None
         self.console = None
@@ -135,7 +137,7 @@ class Question(typing.Generic[T]):
         self.default_function = default_function
         self.default_value = default_value
         self.choices = choices
-        self.accept_defaults = False
+        self.accept_defaults = accept_defaults
         self.password = password
         self.validation_function = validation_function
         self.description = description
