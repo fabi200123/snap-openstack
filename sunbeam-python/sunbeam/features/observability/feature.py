@@ -85,7 +85,7 @@ console = Console()
 
 OBSERVABILITY_FEATURE_KEY = "ObservabilityProviderType"
 OBSERVABILITY_MODEL = "observability"
-OBSERVABILITY_DEPLOY_TIMEOUT = 1200  # 20 minutes
+OBSERVABILITY_DEPLOY_TIMEOUT = 1800  # 30 minutes
 COS_TFPLAN = "cos-plan"
 GRAFANA_AGENT_TFPLAN = "grafana-agent-plan"
 COS_CONFIG_KEY = "TerraformVarsFeatureObservabilityPlanCos"
