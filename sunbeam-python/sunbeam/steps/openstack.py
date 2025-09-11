@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import copy
+import json
 import logging
 import math
 import queue
@@ -718,14 +719,28 @@ class ReapplyOpenStackTerraformPlanStep(BaseStep, JujuStepHelper):
         self.manifest = manifest
         self.model = OPENSTACK_MODEL
 
+    def _get_extra_tfvars_from_manifest(self) -> dict:
+        updates: dict = {}
+        if not self.manifest:
+            return updates
+
+        if self.manifest.core.config.pci and self.manifest.core.config.pci.aliases:
+            updates["nova-config"] = {
+                "pci-aliases": json.dumps(self.manifest.core.config.pci.aliases),
+            }
+
+        return updates
+
     def run(self, status: Status | None = None) -> Result:
         """Reapply Terraform plan if there are changes in tfvars."""
         try:
             self.update_status(status, "deploying services")
+            override_tfvars = self._get_extra_tfvars_from_manifest()
             self.tfhelper.update_tfvars_and_apply_tf(
                 self.client,
                 self.manifest,
                 tfvar_config=self._CONFIG,
+                override_tfvars=override_tfvars,
             )
         except TerraformException as e:
             LOG.exception("Error reconfiguring cloud")

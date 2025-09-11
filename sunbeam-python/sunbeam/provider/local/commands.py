@@ -163,6 +163,7 @@ from sunbeam.steps.openstack import (
     OpenStackPatchLoadBalancerServicesIPStep,
     PromptDatabaseTopologyStep,
     PromptRegionStep,
+    ReapplyOpenStackTerraformPlanStep,
 )
 from sunbeam.steps.sso import (
     DeployIdentityProvidersStep,
@@ -983,6 +984,7 @@ def configure_sriov(
     admin_credentials["OS_INSECURE"] = "true"
 
     tfhelper_hypervisor = deployment.get_tfhelper("hypervisor-plan")
+    tfhelper_openstack = deployment.get_tfhelper("openstack-plan")
 
     plan: list[BaseStep] = [
         LocalConfigSRIOVStep(
@@ -1003,6 +1005,15 @@ def configure_sriov(
             model=deployment.openstack_machines_model,
         ),
     ]
+    if manifest and manifest.core.config.pci and manifest.core.config.pci.aliases:
+        plan.append(
+            ReapplyOpenStackTerraformPlanStep(
+                client,
+                tfhelper_openstack,
+                jhelper,
+                manifest,
+            )
+        )
     run_plan(plan, console, show_hints)
 
 
