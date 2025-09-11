@@ -286,6 +286,7 @@ class LocalConfigSRIOVStep(BaseStep):
         manifest: Manifest | None = None,
         accept_defaults: bool = False,
         show_initial_prompt: bool = True,
+        clear_previous_config: bool = False,
     ):
         super().__init__("SR-IOV Settings", "Configure SR-IOV")
         self.client = client
@@ -299,6 +300,7 @@ class LocalConfigSRIOVStep(BaseStep):
         # specifically asked for this.
         self.show_initial_prompt = show_initial_prompt
         self.should_skip = False
+        self.clear_previous_config = clear_previous_config
 
     def prompt(
         self,
@@ -342,16 +344,22 @@ class LocalConfigSRIOVStep(BaseStep):
         if self.node_name not in excluded_devices:
             excluded_devices[self.node_name] = []
 
-        for device_spec in previous_pci_whitelist:
-            if device_spec not in pci_whitelist:
-                pci_whitelist.append(device_spec)
-        for node in previous_excluded_devices:
-            if node not in excluded_devices:
-                excluded_devices[node] = previous_excluded_devices[node]
-            else:
-                for excluded_device in previous_excluded_devices[node]:
-                    if excluded_device not in excluded_devices[node]:
-                        excluded_devices[node].append(excluded_device)
+        if not self.clear_previous_config:
+            logging.debug("Picking up previous answers.")
+            for device_spec in previous_pci_whitelist:
+                if device_spec not in pci_whitelist:
+                    pci_whitelist.append(device_spec)
+            for node in previous_excluded_devices:
+                if node not in excluded_devices:
+                    excluded_devices[node] = previous_excluded_devices[node]
+                else:
+                    for excluded_device in previous_excluded_devices[node]:
+                        if excluded_device not in excluded_devices[node]:
+                            excluded_devices[node].append(excluded_device)
+        else:
+            # The user requested to drop the previous answers instead of merging the
+            # device lists with the previous ones.
+            logging.debug("Dropping previous answers.")
 
         if not self.accept_defaults:
             self._do_prompt(pci_whitelist, excluded_devices, show_hint)

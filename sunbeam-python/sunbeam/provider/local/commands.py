@@ -945,6 +945,11 @@ def bootstrap(
 @click.command("sriov")
 @click.option("-a", "--accept-defaults", help="Accept all defaults.", is_flag=True)
 @click.option(
+    "--clear-previous-config",
+    help="Do not merge the new settings with the previous answers.",
+    is_flag=True,
+)
+@click.option(
     "-m",
     "--manifest",
     "manifest_path",
@@ -958,6 +963,7 @@ def configure_sriov(
     manifest_path: Path | None = None,
     accept_defaults: bool = False,
     show_hints: bool = False,
+    clear_previous_config: bool = False,
 ) -> None:
     """Configure SR-IOV."""
     deployment: LocalDeployment = ctx.obj
@@ -987,6 +993,7 @@ def configure_sriov(
             manifest,
             accept_defaults,
             show_initial_prompt=False,
+            clear_previous_config=clear_previous_config,
         ),
         ReapplyHypervisorTerraformPlanStep(
             client,
