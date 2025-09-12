@@ -1448,6 +1448,15 @@ def join(
                 ),
             ]
         )
+        if manifest and manifest.core.config.pci and manifest.core.config.pci.aliases:
+            plan4.append(
+                ReapplyOpenStackTerraformPlanStep(
+                    client,
+                    openstack_tfhelper,
+                    jhelper,
+                    manifest,
+                )
+            )
 
     run_plan(plan4, console, show_hints)
 

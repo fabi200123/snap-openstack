@@ -864,6 +864,16 @@ def deploy(
         ),
     ]
 
+    if manifest and manifest.core.config.pci and manifest.core.config.pci.aliases:
+        plan2.append(
+            ReapplyOpenStackTerraformPlanStep(
+                client,
+                tfhelper_openstack_deploy,
+                jhelper,
+                manifest,
+            )
+        )
+
     plan2.append(SetBootstrapped(client))
     run_plan(plan2, console, show_hints)
 
