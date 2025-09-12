@@ -911,29 +911,6 @@ def bootstrap(
                 AddHypervisorUnitsStep(
                     client, fqdn, jhelper, deployment.openstack_machines_model
                 ),
-                LocalConfigSRIOVStep(
-                    client,
-                    fqdn,
-                    jhelper,
-                    deployment.openstack_machines_model,
-                    manifest,
-                    accept_defaults,
-                ),
-                LocalConfigDPDKStep(
-                    client,
-                    fqdn,
-                    jhelper,
-                    deployment.openstack_machines_model,
-                    manifest,
-                    accept_defaults,
-                ),
-                ReapplyHypervisorTerraformPlanStep(
-                    client,
-                    hypervisor_tfhelper,
-                    jhelper,
-                    manifest,
-                    model=deployment.openstack_machines_model,
-                ),
             ]
         )
 
