@@ -18,7 +18,7 @@ resource "juju_application" "microcluster-token-distributor" {
 
   charm {
     name    = "microcluster-token-distributor"
-    channel = var.charm_microovn_channel    # e.g. latest/edge
+    channel = var.charm_microovn_channel
     base    = "ubuntu@24.04"
   }
 }
@@ -31,11 +31,11 @@ resource "juju_application" "microovn" {
 
   charm {
     name    = "microovn"
-    channel = var.charm_microovn_channel    # e.g. latest/edge
+    channel = var.charm_microovn_channel
     base    = "ubuntu@24.04"
   }
 
-  endpoint_bindings = var.endpoint_bindings   # include tls-certificates, ovsdb-cms → management
+  endpoint_bindings = var.endpoint_bindings
 }
 
 resource "juju_integration" "microovn-microcluster-token-distributor" {

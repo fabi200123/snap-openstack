@@ -806,39 +806,7 @@ def bootstrap(
     openstack_tfhelper = deployment.get_tfhelper("openstack-plan")
     plan1.append(TerraformInitStep(openstack_tfhelper))
 
-    # Deploy MicroOVN application during bootstrap irrespective of node role.
-    microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
-    plan1.append(TerraformInitStep(microovn_tfhelper))
-    plan1.append(
-        DeployMicroOVNApplicationStep(
-            deployment,
-            client,
-            microovn_tfhelper,
-            openstack_tfhelper,
-            jhelper,
-            manifest,
-            deployment.openstack_machines_model,
-        )
-    )
-
-    if is_network_node:
-        plan1.append(
-            AddMicroOVNUnitsStep(
-                client, fqdn, jhelper, deployment.openstack_machines_model
-            )
-        )
-        plan1.append(
-            ReapplyMicroOVNOptionalIntegrationsStep(
-                deployment,
-                client,
-                microovn_tfhelper,
-                openstack_tfhelper,
-                jhelper,
-                manifest,
-                deployment.openstack_machines_model,
-                refresh=True,
-            )
-        )
+    # MicroOVN deployment moved after OpenStack control plane deployment
 
     if is_storage_node:
         plan1.append(
@@ -901,6 +869,38 @@ def bootstrap(
                 manifest,
             )
         )
+        # Now that OpenStack is deployed, deploy MicroOVN so CMR offers exist
+        microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
+        plan1.append(TerraformInitStep(microovn_tfhelper))
+        plan1.append(
+            DeployMicroOVNApplicationStep(
+                deployment,
+                client,
+                microovn_tfhelper,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+            )
+        )
+        if is_network_node:
+            plan1.append(
+                AddMicroOVNUnitsStep(
+                    client, fqdn, jhelper, deployment.openstack_machines_model
+                )
+            )
+            plan1.append(
+                ReapplyMicroOVNOptionalIntegrationsStep(
+                    deployment,
+                    client,
+                    microovn_tfhelper,
+                    openstack_tfhelper,
+                    jhelper,
+                    manifest,
+                    deployment.openstack_machines_model,
+                    refresh=True,
+                )
+            )
         # Redeploy of Microceph is required to fill terraform vars
         # related to traefik-rgw/keystone-endpoints offers from
         # openstack model
