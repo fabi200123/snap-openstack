@@ -177,6 +177,7 @@ from sunbeam.steps.openstack import (
     OpenStackPatchLoadBalancerServicesIPStep,
     PromptDatabaseTopologyStep,
     PromptRegionStep,
+    ReapplyOpenStackTerraformPlanStep,
 )
 from sunbeam.steps.sso import (
     DeployIdentityProvidersStep,
@@ -862,6 +863,16 @@ def deploy(
             model=deployment.openstack_machines_model,
         ),
     ]
+
+    if manifest and manifest.core.config.pci and manifest.core.config.pci.aliases:
+        plan2.append(
+            ReapplyOpenStackTerraformPlanStep(
+                client,
+                tfhelper_openstack_deploy,
+                jhelper,
+                manifest,
+            )
+        )
 
     plan2.append(SetBootstrapped(client))
     run_plan(plan2, console, show_hints)
@@ -1743,6 +1754,7 @@ def configure_sriov(
     admin_credentials["OS_INSECURE"] = "true"
 
     tfhelper_hypervisor = deployment.get_tfhelper("hypervisor-plan")
+    tfhelper_openstack = deployment.get_tfhelper("openstack-plan")
 
     plan: list[BaseStep] = [
         MaasConfigSRIOVStep(
@@ -1761,6 +1773,15 @@ def configure_sriov(
             model=deployment.openstack_machines_model,
         ),
     ]
+    if manifest and manifest.core.config.pci and manifest.core.config.pci.aliases:
+        plan.append(
+            ReapplyOpenStackTerraformPlanStep(
+                client,
+                tfhelper_openstack,
+                jhelper,
+                manifest,
+            )
+        )
     run_plan(plan, console, show_hints)
 
 

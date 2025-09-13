@@ -333,7 +333,7 @@ def get_external_network_configs(client: Client) -> dict:
 def get_pci_whitelist_config(client: Client) -> dict:
     charm_config = {}
     variables = sunbeam.core.questions.load_answers(client, PCI_CONFIG_SECTION)
-    charm_config["pci-device-specs"] = json.dumps(variables.get("pci_whitelist", "[]"))
+    charm_config["pci-device-specs"] = json.dumps(variables.get("pci_whitelist", []))
     return charm_config
 
 

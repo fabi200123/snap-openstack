@@ -52,6 +52,7 @@ class TestDeployControlPlaneStep(unittest.TestCase):
         self.jhelper.run_action.return_value = {}
         self.tfhelper = Mock()
         self.manifest = MagicMock()
+        self.manifest.core.config.pci = None
         self.client = Mock()
         self.deployment = Mock()
         self.deployment.get_client.return_value = self.client
@@ -585,6 +586,7 @@ class TestReapplyOpenStackTerraformPlanStep(unittest.TestCase):
         self.tfhelper = Mock()
         self.jhelper = Mock()
         self.manifest = Mock()
+        self.manifest.core.config.pci = None
 
     def tearDown(self):
         self.read_config.stop()
