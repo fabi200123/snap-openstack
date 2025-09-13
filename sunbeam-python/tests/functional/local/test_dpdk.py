@@ -7,7 +7,14 @@ import subprocess
 from . import utils
 
 
-def test_dpdk(tmp_path, manifest_path):
+def test_dpdk(
+    tmp_path,
+    manifest_path,
+    openstack_admin_session,
+    openstack_demo_session,
+    sunbeam_flavor_huge_pages,
+    request,
+):
     manifest_updates = {
         "core": {
             "config": {
@@ -62,3 +69,22 @@ def test_dpdk(tmp_path, manifest_path):
         text=True,
     )
     assert dpdk_initialized.strip() == "true"
+
+    instance_name = "sunbeam-sriov-test"
+    instance = openstack_demo_session.create_server(
+        instance_name,
+        image="ubuntu",
+        flavor=sunbeam_flavor_huge_pages,
+        network="demo-network",
+        wait=True,
+    )
+    request.addfinalizer(lambda: openstack_demo_session.delete_server(instance.id))
+
+    # admin view of the instance, including libvirt domain name
+    admin_instance = openstack_admin_session.get_server(instance.id, all_projects=True)
+    libvirt_domain_name = admin_instance.instance_name
+
+    domain_xml = utils.get_libvirt_domain_xml(libvirt_domain_name)
+    # We won't parse the xml for now, we just want to ensure that there's a
+    # vhost-user interface attached that uses the dpdk data path.
+    assert "<interface type='vhostuser'>" in domain_xml

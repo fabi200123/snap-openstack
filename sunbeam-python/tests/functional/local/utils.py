@@ -20,10 +20,24 @@ from . import snap
 SUNBEAM_BINARY = "/snap/bin/sunbeam"
 SUNBEAM_GROUP = "snap_daemon"
 
+TEST_DEMO_CLOUD_NAME = "sunbeam-test-demo"
+TEST_ADMIN_CLOUD_NAME = "sunbeam-test-admin"
 
-def sunbeam_command(cmd: str):
+
+def sunbeam_command(cmd: str, capture_output=False) -> int | str | None:
+    """Run the specified Sunbeam command.
+
+    Use this helper after calling "sunbeam prepare-node-script"
+    to run as "snap_daemon" and have the necessary privileges.
+
+    Consider disabling output capturing if the output is not needed
+    by the caller. This way, the test log will contain the command output.
+    """
     sg_cmd = ["sg", SUNBEAM_GROUP, f"{SUNBEAM_BINARY} {cmd}"]
-    return subprocess.check_output(sg_cmd, text=True)
+    if capture_output:
+        return subprocess.check_output(sg_cmd, text=True)
+    else:
+        return subprocess.check_call(sg_cmd, text=True)
 
 
 def get_sunbeam_deployments() -> dict:
@@ -239,3 +253,22 @@ def bitmask_to_core_list(core_bitmask: int) -> list[int]:
         idx += 1
         core_bitmask >>= 1
     return cores
+
+
+def generate_cloud_config(path: str, is_admin=True):
+    cloud_name = TEST_ADMIN_CLOUD_NAME if is_admin else TEST_DEMO_CLOUD_NAME
+    admin_flag = "--admin" if is_admin else ""
+    cmd = f"cloud-config -c {cloud_name} {admin_flag} -f {path} -u"
+    sunbeam_command(cmd)
+
+
+def create_sunbeam_demo_resources(manifest_path: str | None):
+    cmd = "configure deployment --accept-defaults"
+    if manifest_path:
+        cmd += f" --manifest {manifest_path}"
+    sunbeam_command(cmd)
+
+
+def get_libvirt_domain_xml(domain_name: str) -> str:
+    cmd = ["sudo", "openstack-hypervisor.virsh", "dumpxml", domain_name]
+    return subprocess.check_output(cmd, text=True)
