@@ -124,6 +124,7 @@ class ReapplyMicroOVNOptionalIntegrationsStep(DeployMicroOVNApplicationStep):
             "-target=juju_integration.microovn-microcluster-token-distributor",
             "-target=juju_integration.microovn-certs",
             "-target=juju_integration.microovn-ovsdb-cms",
+            "-target=juju_integration.microovn-openstack-network-agents",
         ]
 
 

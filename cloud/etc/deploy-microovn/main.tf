@@ -10,6 +10,18 @@ terraform {
 
 provider "juju" {}
 
+resource "juju_application" "openstack-network-agents" {
+  name  = "openstack-network-agents"
+  trust = true
+  model = var.machine_model
+
+  charm {
+    name    = "openstack-network-agents"
+    channel = var.charm_openstack_network_agents_channel
+    base    = "ubuntu@24.04"
+  }
+}
+
 resource "juju_application" "microcluster-token-distributor" {
   name  = "microcluster-token-distributor"
   trust = true
@@ -18,7 +30,7 @@ resource "juju_application" "microcluster-token-distributor" {
 
   charm {
     name    = "microcluster-token-distributor"
-    channel = var.charm_microovn_channel
+    channel = var.charm_microcluster_token_distributor_channel
     base    = "ubuntu@24.04"
   }
 }
@@ -77,6 +89,20 @@ resource "juju_integration" "microovn-ovsdb-cms" {
 
   application {
     offer_url = var.ovn-relay-offer-url
+  }
+}
+
+resource "juju_integration" "microovn-openstack-network-agents" {
+  model = var.machine_model
+
+  application {
+    name     = juju_application.microovn.name
+    endpoint = "juju-info"
+  }
+
+  application {
+    name     = juju_application.openstack-network-agents.name
+    endpoint = "juju-info"
   }
 }
 

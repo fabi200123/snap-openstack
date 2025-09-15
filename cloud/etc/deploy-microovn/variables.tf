@@ -12,6 +12,18 @@ variable "microovn_snap_channel" {
   default     = "latest/edge"
 }
 
+variable "charm_openstack_network_agents_channel" {
+  description = "Operator channel for openstack-network-agents deployment"
+  type        = string
+  default     = "latest/edge"
+}
+
+variable "charm_microcluster_token_distributor_channel" {
+  description = "Operator channel for microcluster-token-distributor deployment"
+  type        = string
+  default     = "latest/edge"
+}
+
 variable "charm_microovn_config" {
   description = "Operator config for microovn deployment"
   type        = map(string)
@@ -46,12 +58,12 @@ variable "endpoint_bindings" {
 variable "ca-offer-url" {
   description = "Offer URL for Certificates"
   type        = string
-  default     = "sunbeam/openstack.certificate-authority"
+  default     = null
 }
 
 # Mandatory relation, no defaults
 variable "ovn-relay-offer-url" {
   description = "Offer URL for ovn relay service"
   type        = string
-  default     = "sunbeam/openstack.ovn-relay"
+  default     = null
 }
