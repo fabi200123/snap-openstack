@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+import secrets
+from pathlib import Path
 
 import click
 from packaging.version import Version
@@ -25,6 +27,7 @@ from sunbeam.core.manifest import (
     CharmManifest,
     FeatureConfig,
     SoftwareConfig,
+    TerraformManifest,
 )
 from sunbeam.core.terraform import (
     TerraformInitStep,
@@ -35,9 +38,16 @@ from sunbeam.features.interface.v1.openstack import (
     OpenStackControlPlaneFeature,
     TerraformPlanLocation,
 )
+from sunbeam.features.shared_filesystem import manila_data
 from sunbeam.steps import microceph
 from sunbeam.utils import click_option_show_hints, pass_method_obj
 from sunbeam.versions import OPENSTACK_CHANNEL
+
+MANILA_DATA_DEPLOY_TIMEOUT = 600  # 10 minutes
+MANILA_DATA_TFPLAN = "manila-data-plan"
+MANILA_DATA_TFPLAN_DIR = "deploy-manila-data"
+MANILA_DATA_CONFIG_KEY = "TerraformVarsFeatureManilaDataPlan"
+MANILA_DATA_APP = "manila-data"
 
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -128,13 +138,24 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
     name = "shared-filesystem"
     tf_plan_location = TerraformPlanLocation.SUNBEAM_TERRAFORM_REPO
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.tfplan_manila_data = MANILA_DATA_TFPLAN
+        self.tfplan_manila_data_dir = MANILA_DATA_TFPLAN_DIR
+
     def default_software_overrides(self) -> SoftwareConfig:
         """Feature software configuration."""
         return SoftwareConfig(
             charms={
                 "manila-k8s": CharmManifest(channel=OPENSTACK_CHANNEL),
                 "manila-cephfs-k8s": CharmManifest(channel=OPENSTACK_CHANNEL),
-            }
+                "manila-data": CharmManifest(channel="2024.1/edge"),
+            },
+            terraform={
+                self.tfplan_manila_data: TerraformManifest(
+                    source=Path(__file__).parent / "etc" / self.tfplan_manila_data_dir
+                ),
+            },
         )
 
     def manifest_attributes_tfvar_map(self) -> dict:
@@ -152,8 +173,17 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
                         "revision": "manila-cephfs-revision",
                         "config": "manila-cephfs-config",
                     },
-                }
-            }
+                },
+            },
+            self.tfplan_manila_data: {
+                "charms": {
+                    "manila-data": {
+                        "channel": "charm-manila-data-channel",
+                        "revision": "charm-manila-data-revision",
+                        "config": "charm-manila-data-config",
+                    },
+                },
+            },
         }
 
     def set_application_names(self, deployment: Deployment) -> list:
@@ -163,6 +193,7 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
             "manila-mysql-router",
             "manila-cephfs",
             "manila-cephfs-mysql-router",
+            "manila-data-mysql-router",
         ]
 
         if self.get_database_topology(deployment) == "multi":
@@ -176,6 +207,9 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
         """Run the enablement plans."""
         jhelper = JujuHelper(deployment.juju_controller)
         tfhelper = deployment.get_tfhelper(self.tfplan)
+        tfhelper_openstack = deployment.get_tfhelper("openstack-plan")
+        tfhelper_manila_data = deployment.get_tfhelper(self.tfplan_manila_data)
+        client = deployment.get_client()
 
         plan: list[BaseStep] = []
         if self.user_manifest:
@@ -195,9 +229,36 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
         )
 
         ceph_nfs_plan = [CreateCephNFSOfferStep(deployment, jhelper)]
+        manila_data_plan = [
+            TerraformInitStep(tfhelper_manila_data),
+            manila_data.DeployManilaDataApplicationStep(
+                deployment,
+                client,
+                tfhelper_manila_data,
+                jhelper,
+                self.manifest,
+                deployment.openstack_machines_model,
+            ),
+        ]
+
+        storage_nodes = client.cluster.list_nodes_by_role("storage")
+        if storage_nodes:
+            i = secrets.randbelow(len(storage_nodes))
+            manila_data_plan.extend(
+                [
+                    manila_data.AddManilaDataUnitsStep(
+                        client,
+                        storage_nodes[i]["name"],
+                        jhelper,
+                        deployment.openstack_machines_model,
+                        tfhelper_openstack,
+                    ),
+                ]
+            )
 
         run_plan(ceph_nfs_plan, console, show_hints)
-        run_plan(plan, console, show_hints)
+        # run_plan(plan, console, show_hints)
+        run_plan(manila_data_plan, console, show_hints)
 
         click.echo("Shared Filesystems enabled.")
 
@@ -205,6 +266,7 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
         """Run the disablement plans."""
         jhelper = JujuHelper(deployment.juju_controller)
         tfhelper = deployment.get_tfhelper(self.tfplan)
+        tfhelper_manila_data = deployment.get_tfhelper(self.tfplan_manila_data)
 
         plan = [
             TerraformInitStep(tfhelper),
@@ -212,7 +274,18 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
         ]
 
         ceph_nfs_plan = [RemoveCephNFSOfferStep(deployment, jhelper)]
+        manila_data_plan = [
+            TerraformInitStep(tfhelper_manila_data),
+            manila_data.DestroyManilaDataApplicationStep(
+                deployment.get_client(),
+                tfhelper_manila_data,
+                jhelper,
+                self.manifest,
+                deployment.openstack_machines_model,
+            ),
+        ]
 
+        run_plan(manila_data_plan, console, show_hints)
         run_plan(plan, console, show_hints)
         run_plan(ceph_nfs_plan, console, show_hints)
 
