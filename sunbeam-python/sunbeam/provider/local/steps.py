@@ -36,6 +36,7 @@ from sunbeam.steps.cluster_status import ClusterStatusStep
 from sunbeam.steps.clusterd import CLUSTERD_PORT
 from sunbeam.steps.k8s import get_loadbalancer_config
 from sunbeam.steps.openstack import EndpointsConfigurationStep
+from sunbeam.core.openstack import OPENSTACK_MODEL
 
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -757,3 +758,61 @@ class LocalConfigDPDKStep(BaseConfigDPDKStep):
             return Result(ResultType.FAILED, msg)
 
         return Result(ResultType.COMPLETED)
+
+
+class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep):
+    """Run action to set openstack-network-agents local settings.
+
+    This is intended to run after microovn optional integrations are applied,
+    so juju-info relation to openstack-network-agents exists.
+    """
+
+    def __init__(
+        self,
+        jhelper: JujuHelper,
+        external_interface: str,
+        bridge_name: str,
+        physnet_name: str,
+        enable_chassis_as_gw: bool = True,
+        model: str = OPENSTACK_MODEL,
+    ):
+        super().__init__(
+            "Configure OpenStack network agents",
+            "Setting openstack-network-agents local settings",
+        )
+        self.jhelper = jhelper
+        self.model = model
+        self.external_interface = external_interface
+        self.bridge_name = bridge_name
+        self.physnet_name = physnet_name
+        self.enable_chassis_as_gw = enable_chassis_as_gw
+
+    def is_skip(self, status: Status | None = None) -> Result:
+        try:
+            app = self.jhelper.get_application("openstack-network-agents", self.model)
+        except Exception:
+            return Result(ResultType.SKIPPED, "openstack-network-agents not deployed")
+        if not app.units:
+            return Result(ResultType.SKIPPED, "openstack-network-agents has no units")
+        return Result(ResultType.COMPLETED)
+
+    def run(self, status: Status | None = None) -> Result:
+        try:
+            app = self.jhelper.get_application("openstack-network-agents", self.model)
+            # Run on the first unit available
+            unit_name = sorted(app.units.keys())[0]
+            self.jhelper.run_action(
+                unit_name,
+                self.model,
+                "set-network-agents-local-settings",
+                action_params={
+                    "external-interface": self.external_interface,
+                    "bridge-name": self.bridge_name,
+                    "physnet-name": self.physnet_name,
+                    "enable-chassis-as-gw": str(self.enable_chassis_as_gw).lower(),
+                },
+            )
+            return Result(ResultType.COMPLETED)
+        except (ActionFailedException, TimeoutError, Exception) as e:
+            LOG.debug(str(e))
+            return Result(ResultType.FAILED, "Failed to configure openstack-network-agents")

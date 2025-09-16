@@ -81,6 +81,7 @@ from sunbeam.provider.local.steps import (
     LocalConfigSRIOVStep,
     LocalEndpointsConfigurationStep,
     LocalSetHypervisorUnitsOptionsStep,
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep,
 )
 from sunbeam.steps import cluster_status
 from sunbeam.steps.bootstrap_state import SetBootstrapped
@@ -901,6 +902,16 @@ def bootstrap(
                     refresh=True,
                 )
             )
+            plan1.append(
+                ConfigureOpenStackNetworkAgentsLocalSettingsStep(
+                    jhelper,
+                    external_interface="ens19",
+                    bridge_name="br-ex",
+                    physnet_name="physnet1",
+                    enable_chassis_as_gw=True,
+                    model=deployment.openstack_machines_model,
+                )
+            )
         # Redeploy of Microceph is required to fill terraform vars
         # related to traefik-rgw/keystone-endpoints offers from
         # openstack model
@@ -989,6 +1000,17 @@ def bootstrap(
                 manifest,
                 deployment.openstack_machines_model,
                 refresh=True,
+            )
+        )
+        # Configure network agents local settings after juju-info relation exists
+        plan2.append(
+            ConfigureOpenStackNetworkAgentsLocalSettingsStep(
+                jhelper,
+                external_interface="ens19",
+                bridge_name="br-ex",
+                physnet_name="physnet1",
+                enable_chassis_as_gw=True,
+                model=deployment.openstack_machines_model,
             )
         )
 
