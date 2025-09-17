@@ -82,6 +82,7 @@ from sunbeam.provider.local.steps import (
     LocalEndpointsConfigurationStep,
     LocalSetHypervisorUnitsOptionsStep,
     ConfigureOpenStackNetworkAgentsLocalSettingsStep,
+    LocalConfigureOpenStackNetworkAgentsStep,
 )
 from sunbeam.steps import cluster_status
 from sunbeam.steps.bootstrap_state import SetBootstrapped
@@ -903,12 +904,15 @@ def bootstrap(
                 )
             )
             plan1.append(
-                ConfigureOpenStackNetworkAgentsLocalSettingsStep(
+                LocalConfigureOpenStackNetworkAgentsStep(
+                    client,
+                    fqdn,
                     jhelper,
-                    external_interface="ens19",
+                    deployment.openstack_machines_model,
+                    manifest,
+                    accept_defaults,
                     bridge_name="br-ex",
                     physnet_name="physnet1",
-                    model=deployment.openstack_machines_model,
                     enable_chassis_as_gw=True,
                 )
             )
@@ -1004,12 +1008,15 @@ def bootstrap(
         )
         # Configure network agents local settings after juju-info relation exists
         plan2.append(
-            ConfigureOpenStackNetworkAgentsLocalSettingsStep(
+            LocalConfigureOpenStackNetworkAgentsStep(
+                client,
+                fqdn,
                 jhelper,
-                external_interface="ens19",
+                deployment.openstack_machines_model,
+                manifest,
+                accept_defaults,
                 bridge_name="br-ex",
                 physnet_name="physnet1",
-                model=deployment.openstack_machines_model,
                 enable_chassis_as_gw=True,
             )
         )
@@ -1449,12 +1456,15 @@ def join(
                 )
             )
             plan4.append(
-                ConfigureOpenStackNetworkAgentsLocalSettingsStep(
+                LocalConfigureOpenStackNetworkAgentsStep(
+                    client,
+                    name,
                     jhelper,
-                    external_interface="ens19",
+                    deployment.openstack_machines_model,
+                    manifest,
+                    accept_defaults,
                     bridge_name="br-ex",
                     physnet_name="physnet1",
-                    model=deployment.openstack_machines_model,
                     enable_chassis_as_gw=True,
                 )
             )
