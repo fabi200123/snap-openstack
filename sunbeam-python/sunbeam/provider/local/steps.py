@@ -773,8 +773,8 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
         external_interface: str,
         bridge_name: str,
         physnet_name: str,
+        model: str,
         enable_chassis_as_gw: bool = True,
-        model: str = OPENSTACK_MODEL,
     ):
         super().__init__(
             "Configure OpenStack network agents",

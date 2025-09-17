@@ -908,8 +908,8 @@ def bootstrap(
                     external_interface="ens19",
                     bridge_name="br-ex",
                     physnet_name="physnet1",
-                    enable_chassis_as_gw=True,
                     model=deployment.openstack_machines_model,
+                    enable_chassis_as_gw=True,
                 )
             )
         # Redeploy of Microceph is required to fill terraform vars
@@ -1009,8 +1009,8 @@ def bootstrap(
                 external_interface="ens19",
                 bridge_name="br-ex",
                 physnet_name="physnet1",
-                enable_chassis_as_gw=True,
                 model=deployment.openstack_machines_model,
+                enable_chassis_as_gw=True,
             )
         )
 
@@ -1454,8 +1454,8 @@ def join(
                     external_interface="ens19",
                     bridge_name="br-ex",
                     physnet_name="physnet1",
-                    enable_chassis_as_gw=True,
                     model=deployment.openstack_machines_model,
+                    enable_chassis_as_gw=True,
                 )
             )
 
