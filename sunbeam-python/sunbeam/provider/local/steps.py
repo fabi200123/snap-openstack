@@ -28,7 +28,7 @@ from sunbeam.core.common import (
     SunbeamException,
     parse_ip_range_or_cidr,
 )
-from sunbeam.core.juju import ActionFailedException, JujuHelper
+from sunbeam.core.juju import ActionFailedException, JujuHelper, JujuStepHelper
 from sunbeam.core.manifest import Manifest
 from sunbeam.provider.common import nic_utils
 from sunbeam.steps import hypervisor
@@ -760,7 +760,7 @@ class LocalConfigDPDKStep(BaseConfigDPDKStep):
         return Result(ResultType.COMPLETED)
 
 
-class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep):
+class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper):
     """Run action to set openstack-network-agents local settings.
 
     This is intended to run after microovn optional integrations are applied,
@@ -789,17 +789,23 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep):
 
     def is_skip(self, status: Status | None = None) -> Result:
         try:
-            app = self.jhelper.get_application("openstack-network-agents", self.model)
+            self.jhelper.get_application("openstack-network-agents", self.model)
         except Exception:
             return Result(ResultType.SKIPPED, "openstack-network-agents not deployed")
-        if not app.units:
-            return Result(ResultType.SKIPPED, "openstack-network-agents has no units")
         return Result(ResultType.COMPLETED)
 
     def run(self, status: Status | None = None) -> Result:
         try:
+            # Wait for app to be ready enough to accept actions
+            self.jhelper.wait_application_ready(
+                "openstack-network-agents",
+                self.model,
+                accepted_status=["active", "blocked"],
+                timeout=600,
+            )
             app = self.jhelper.get_application("openstack-network-agents", self.model)
-            # Run on the first unit available
+            if not app.units:
+                return Result(ResultType.SKIPPED, "openstack-network-agents has no units yet")
             unit_name = sorted(app.units.keys())[0]
             self.jhelper.run_action(
                 unit_name,

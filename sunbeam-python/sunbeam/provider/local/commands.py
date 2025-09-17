@@ -1448,6 +1448,16 @@ def join(
                     refresh=True,
                 )
             )
+            plan4.append(
+                ConfigureOpenStackNetworkAgentsLocalSettingsStep(
+                    jhelper,
+                    external_interface="ens19",
+                    bridge_name="br-ex",
+                    physnet_name="physnet1",
+                    enable_chassis_as_gw=True,
+                    model=deployment.openstack_machines_model,
+                )
+            )
 
     if is_storage_node:
         plan4.append(
