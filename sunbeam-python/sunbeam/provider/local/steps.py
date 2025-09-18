@@ -875,75 +875,70 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
         return None
 
     def _get_answers_nic(self) -> str | None:
-        # Reuse answers captured during hypervisor NIC selection
+        """Reuse external NIC from previously saved answers (hypervisor step)."""
         try:
             from sunbeam.commands.configure import CLOUD_CONFIG_SECTION
             answers = sunbeam.core.questions.load_answers(self.client, CLOUD_CONFIG_SECTION) or {}
         except Exception:
             return None
-        # Prefer host-specific mapping if present
+        # Accept both {"external_network":{"nics":{"host":"nic"}}} and legacy {"nic":"..."}
         ext = (answers.get("external_network")
                or answers.get("user", {}).get("external_network")
                or answers)
-        # Support either {"nics": {"host": "nic"}} or legacy {"nic": "nic"}
-        host_map = (ext.get("nics") if isinstance(ext, dict) else None) or {}
-        if isinstance(host_map, dict) and self.node_name in host_map:
-            return host_map[self.node_name]
-        nic = ext.get("nic") if isinstance(ext, dict) else None
-        return nic
+        if isinstance(ext, dict):
+            host_map = ext.get("nics") or {}
+            if isinstance(host_map, dict) and self.node_name in host_map:
+                return host_map[self.node_name]
+            return ext.get("nic")
+        return None
 
-    def prompt(
-        self,
-        console: Console | None = None,
-        show_hint: bool = False,
-    ) -> None:
+    def prompt(self, console: Console | None = None, show_hint: bool = False) -> None:
+        # 1) manifest
         nic = self._get_manifest_nic()
         if nic:
             self.external_interface = nic
             return
-        # 2) previously answered config (from hypervisor step)
+
+        # 2) previously answered config
         nic = self._get_answers_nic()
         if nic:
             self.external_interface = nic
             return
 
+        # 3) accept-defaults: auto-pick first unconfigured NIC
         if self.accept_defaults:
-            # 3) try to auto-pick a reasonable candidate (first unconfigured NIC)
             try:
                 nics = nic_utils.fetch_nics(self.client, self.node_name, self.jhelper, self.model)
-                all_nics: list[dict] = nics.get("nics") or []
-                for i in all_nics:
+                for i in (nics.get("nics") or []):
                     if i.get("name") and not i.get("configured"):
                         self.external_interface = i["name"]
                         LOG.info("Auto-selected external interface %s (accept-defaults)", self.external_interface)
                         return
             except Exception:
                 pass
-            return
+            return  # nothing found; run() will SKIP
+
+        # 4) interactive prompt
         if not console:
             return
-
-        # Discover NICs and prompt the user to choose one
         with console.status("Fetching candidate nics for external network"):
             nics = nic_utils.fetch_nics(self.client, self.node_name, self.jhelper, self.model)
         all_nics: list[dict] = nics.get("nics") or []
-        candidate_nics: list[str] = [nic["name"] for nic in all_nics if nic.get("name")]
+        candidate_nics: list[str] = [n.get("name") for n in all_nics if n.get("name")]
         if not candidate_nics:
             return
         question = sunbeam.core.questions.PromptQuestion(
             "External gateway interface",
-            description=(
-                "Interface to use for the external gateway (will be bound by OVS)."
-            ),
+            description=("Interface to use for the external gateway (will be bound by OVS)."),
         )
         self.external_interface = question.ask(new_choices=candidate_nics)
 
     def run(self, status: Status | None = None) -> Result:
-        # If still not determined, try manifest/answers one last time
+        # last-chance lookups
         self.external_interface = (
             self.external_interface
-            or self._get_manifest_nic()
-            or self._get_answers_nic()
+            | self._get_manifest_nic()
+            | self._get_answers_nic()
         )
         if not self.external_interface:
             return Result(ResultType.SKIPPED, "external-interface not provided")
@@ -956,5 +951,98 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
             model=self.model,
             enable_chassis_as_gw=self.enable_chassis_as_gw,
         )
-        # Delegate to existing implementation
         return step.run(status)
+
+class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
+    """Deploy openstack-network-agents and relate to microovn:juju-info if needed."""
+    def __init__(self, jhelper: JujuHelper, model: str, channel: str = "latest/edge"):
+        super().__init__(
+            "Deploy openstack-network-agents",
+            "Ensuring openstack-network-agents is deployed and related",
+        )
+        self.jhelper = jhelper
+        self.model = model
+        self.channel = channel
+
+    def _integration_exists(self, ep1: str, ep2: str) -> bool:
+        # Prefer integration_exists if available
+        if hasattr(self.jhelper, "integration_exists"):
+            try:
+                return bool(self.jhelper.integration_exists(self.model, ep1, ep2))
+            except Exception:
+                pass
+        # Fall back to relation_exists if available
+        if hasattr(self.jhelper, "relation_exists"):
+            try:
+                return bool(self.jhelper.relation_exists(self.model, ep1, ep2))
+            except Exception:
+                pass
+        return False
+
+    def _ensure_integration(self, ep1: str, ep2: str) -> None:
+        if self._integration_exists(ep1, ep2):
+            return
+        # Try modern "integration" verbs first
+        for meth in ("add_integration", "integrate"):
+            if hasattr(self.jhelper, meth):
+                getattr(self.jhelper, meth)(self.model, ep1, ep2)
+                return
+        # Then try legacy "relation" verbs
+        for meth in ("add_relation", "relate"):
+            if hasattr(self.jhelper, meth):
+                getattr(self.jhelper, meth)(self.model, ep1, ep2)
+                return
+        # Final fallback: shell out to juju (works inside snap)
+        import subprocess
+        subprocess.run(
+            ["juju", "-m", self.model, "integrate", ep1, ep2],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def run(self, status: Status | None = None) -> Result:
+        try:
+            # Ensure app is deployed
+            try:
+                self.jhelper.get_application("openstack-network-agents", self.model)
+            except Exception:
+                self.update_status(status, "Deploying openstack-network-agents")
+                self.jhelper.deploy(
+                    "openstack-network-agents",
+                    model=self.model,
+                    channel=self.channel,
+                    trust=True,
+                )
+
+            # Ensure integration to create a subordinate unit
+            self.update_status(
+                status, "Relating microovn:juju-info -> openstack-network-agents:juju-info"
+            )
+            try:
+                self._ensure_integration(
+                    "microovn:juju-info", "openstack-network-agents:juju-info"
+                )
+            except Exception as e:
+                # Ignore "already integrated/related" errors
+                msg = str(e).lower()
+                if "already" not in msg and "exist" not in msg and "duplicate" not in msg:
+                    raise
+
+            # Wait until the subordinate actually has a unit
+            self.jhelper.wait_application_ready(
+                "openstack-network-agents",
+                self.model,
+                accepted_status=["active", "blocked", "waiting"],
+                timeout=600,
+            )
+            app = self.jhelper.get_application("openstack-network-agents", self.model)
+            if not app.units:
+                return Result(
+                    ResultType.FAILED,
+                    "openstack-network-agents has no units; juju-info integration may be missing.",
+                )
+            return Result(ResultType.COMPLETED)
+        except Exception as e:
+            LOG.error("Failed ensuring openstack-network-agents is ready: %s", e, exc_info=True)
+            return Result(ResultType.FAILED, str(e))

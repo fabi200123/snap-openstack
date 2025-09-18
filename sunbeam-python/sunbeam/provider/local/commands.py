@@ -83,6 +83,7 @@ from sunbeam.provider.local.steps import (
     LocalSetHypervisorUnitsOptionsStep,
     ConfigureOpenStackNetworkAgentsLocalSettingsStep,
     LocalConfigureOpenStackNetworkAgentsStep,
+    EnsureOpenStackNetworkAgentsDeployedStep,
 )
 from sunbeam.steps import cluster_status
 from sunbeam.steps.bootstrap_state import SetBootstrapped
@@ -904,6 +905,11 @@ def bootstrap(
                 )
             )
             plan1.append(
+                EnsureOpenStackNetworkAgentsDeployedStep(
+                    jhelper, deployment.openstack_machines_model, channel="latest/edge"
+                )
+            )
+            plan1.append(
                 LocalConfigureOpenStackNetworkAgentsStep(
                     client,
                     fqdn,
@@ -1004,6 +1010,11 @@ def bootstrap(
                 manifest,
                 deployment.openstack_machines_model,
                 refresh=True,
+            )
+        )
+        plan2.append(
+            EnsureOpenStackNetworkAgentsDeployedStep(
+                jhelper, deployment.openstack_machines_model, channel="latest/edge"
             )
         )
         # Configure network agents local settings after juju-info relation exists
