@@ -247,7 +247,10 @@ class TestAddManifestStep:
         assert result.result_type == ResultType.COMPLETED
 
     def test_is_skip_no_manifest_risk_edge(self, snap_conf, edge_manifest):
-        snap_conf.config.get.side_effect = lambda key: "edge"
+        snap_conf.config.get.side_effect = lambda key: {
+            "deployment.risk": "edge",
+            "deployment.version": "2024.1",
+        }.get(key, None)
         client = Mock()
         client.cluster.get_latest_manifest.side_effect = ManifestItemNotFoundException(
             "Manifest Item not found."
@@ -255,7 +258,9 @@ class TestAddManifestStep:
         step = manifest_mod.AddManifestStep(client)
         result = step.is_skip()
 
-        manifest_mod.embedded_manifest_path.assert_called_once_with(snap_conf, "edge")
+        manifest_mod.embedded_manifest_path.assert_called_once_with(
+            snap_conf, "2024.1", "edge"
+        )
         assert result.result_type == ResultType.COMPLETED
 
     def test_run(self, tmpdir, snap_conf, edge_manifest):
