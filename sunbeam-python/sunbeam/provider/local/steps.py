@@ -761,7 +761,7 @@ class LocalConfigDPDKStep(BaseConfigDPDKStep):
 
 
 class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper):
-    """Run action to set openstack-network-agents local settings.
+    """Configure openstack-network-agents local settings via charm config.
 
     This is intended to run after microovn optional integrations are applied,
     so juju-info relation to openstack-network-agents exists.
@@ -796,31 +796,30 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
 
     def run(self, status: Status | None = None) -> Result:
         try:
-            # Wait for app to be ready enough to accept actions
+            # Ensure app exists and is in a usable state
             self.jhelper.wait_application_ready(
                 "openstack-network-agents",
                 self.model,
-                accepted_status=["active", "blocked"],
+                accepted_status=["active", "blocked", "waiting"],
                 timeout=600,
             )
-            app = self.jhelper.get_application("openstack-network-agents", self.model)
-            if not app.units:
-                return Result(ResultType.SKIPPED, "openstack-network-agents has no units yet")
-            unit_name = sorted(app.units.keys())[0]
-            self.jhelper.run_action(
-                unit_name,
-                self.model,
-                "set-network-agents-local-settings",
-                action_params={
-                    "external-interface": self.external_interface,
-                    "bridge-name": self.bridge_name,
-                    "physnet-name": self.physnet_name,
-                    "enable-chassis-as-gw": str(self.enable_chassis_as_gw).lower(),
-                },
-            )
+            self.jhelper.get_application("openstack-network-agents", self.model)
+
+            # Set charm config (no subprocess, no actions)
+            with self.jhelper._model(self.model) as juju:
+                args = [
+                    "config",
+                    "openstack-network-agents",
+                    f"external-interface={self.external_interface}",
+                    f"bridge-name={self.bridge_name}",
+                    f"physnet-name={self.physnet_name}",
+                    f"enable-chassis-as-gw={str(self.enable_chassis_as_gw).lower()}",
+                ]
+                self.jhelper.cli(*args, juju=juju, json_format=False)
+
             return Result(ResultType.COMPLETED)
-        except (ActionFailedException, TimeoutError, Exception) as e:
-            LOG.debug(str(e))
+        except Exception as e:
+            LOG.debug("Failed to configure openstack-network-agents: %s", e, exc_info=True)
             return Result(ResultType.FAILED, "Failed to configure openstack-network-agents")
 
 
@@ -830,7 +829,7 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
     - Prefers manifest `core.config.external_network.nics[hostname]` or deprecated
       `core.config.external_network.nic`.
     - If not provided and not in accept-defaults mode, prompts user to choose.
-    - Runs the `set-network-agents-local-settings` action afterward.
+    - Applies charm config (no actions).
     """
 
     def __init__(
@@ -937,8 +936,8 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
         # last-chance lookups
         self.external_interface = (
             self.external_interface
-            | self._get_manifest_nic()
-            | self._get_answers_nic()
+            or self._get_manifest_nic()
+            or self._get_answers_nic()
         )
         if not self.external_interface:
             return Result(ResultType.SKIPPED, "external-interface not provided")
@@ -964,43 +963,6 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
         self.model = model
         self.channel = channel
 
-    def _integration_exists(self, ep1: str, ep2: str) -> bool:
-        # Prefer integration_exists if available
-        if hasattr(self.jhelper, "integration_exists"):
-            try:
-                return bool(self.jhelper.integration_exists(self.model, ep1, ep2))
-            except Exception:
-                pass
-        # Fall back to relation_exists if available
-        if hasattr(self.jhelper, "relation_exists"):
-            try:
-                return bool(self.jhelper.relation_exists(self.model, ep1, ep2))
-            except Exception:
-                pass
-        return False
-
-    def _ensure_integration(self, ep1: str, ep2: str) -> None:
-        if self._integration_exists(ep1, ep2):
-            return
-        # Try modern "integration" verbs first
-        for meth in ("add_integration", "integrate"):
-            if hasattr(self.jhelper, meth):
-                getattr(self.jhelper, meth)(self.model, ep1, ep2)
-                return
-        # Then try legacy "relation" verbs
-        for meth in ("add_relation", "relate"):
-            if hasattr(self.jhelper, meth):
-                getattr(self.jhelper, meth)(self.model, ep1, ep2)
-                return
-        # Final fallback: shell out to juju (works inside snap)
-        import subprocess
-        subprocess.run(
-            ["juju", "-m", self.model, "integrate", ep1, ep2],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
     def run(self, status: Status | None = None) -> Result:
         try:
             # Ensure app is deployed
@@ -1009,10 +971,10 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
             except Exception:
                 self.update_status(status, "Deploying openstack-network-agents")
                 self.jhelper.deploy(
-                    "openstack-network-agents",
+                    name="openstack-network-agents",
+                    charm="openstack-network-agents",
                     model=self.model,
                     channel=self.channel,
-                    trust=True,
                 )
 
             # Ensure integration to create a subordinate unit
@@ -1020,14 +982,16 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
                 status, "Relating microovn:juju-info -> openstack-network-agents:juju-info"
             )
             try:
-                self._ensure_integration(
-                    "microovn:juju-info", "openstack-network-agents:juju-info"
-                )
-            except Exception as e:
-                # Ignore "already integrated/related" errors
-                msg = str(e).lower()
-                if "already" not in msg and "exist" not in msg and "duplicate" not in msg:
-                    raise
+                # Only add relation if missing; use existing helper signature
+                if not self.jhelper.are_integrated(
+                    self.model, "microovn", "openstack-network-agents", "juju-info"
+                ):
+                    self.jhelper.integrate(
+                        self.model, "microovn", "openstack-network-agents", "juju-info"
+                    )
+            except Exception:
+                # If the relation already exists or races, ignore
+                LOG.debug("Integration likely exists; continuing.", exc_info=True)
 
             # Wait until the subordinate actually has a unit
             self.jhelper.wait_application_ready(
