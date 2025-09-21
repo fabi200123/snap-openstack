@@ -965,7 +965,7 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
 
     def run(self, status: Status | None = None) -> Result:
         try:
-            # Ensure app is deployed
+            # Ensure the application exists (deploy if missing)
             try:
                 self.jhelper.get_application("openstack-network-agents", self.model)
             except Exception:
@@ -977,12 +977,12 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
                     channel=self.channel,
                 )
 
-            # Ensure integration to create a subordinate unit
+            # Ensure juju-info integration so the subordinate is created
             self.update_status(
-                status, "Relating microovn:juju-info -> openstack-network-agents:juju-info"
+                status,
+                "Relating microovn:juju-info -> openstack-network-agents:juju-info",
             )
             try:
-                # Only add relation if missing; use existing helper signature
                 if not self.jhelper.are_integrated(
                     self.model, "microovn", "openstack-network-agents", "juju-info"
                 ):
@@ -990,22 +990,15 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
                         self.model, "microovn", "openstack-network-agents", "juju-info"
                     )
             except Exception:
-                # If the relation already exists or races, ignore
-                LOG.debug("Integration likely exists; continuing.", exc_info=True)
+                LOG.debug("Integration may already exist; continuing.", exc_info=True)
 
-            # Wait until the subordinate actually has a unit
+            # Wait until the app is in a stable state; it may be 'blocked' until config
             self.jhelper.wait_application_ready(
                 "openstack-network-agents",
                 self.model,
                 accepted_status=["active", "blocked", "waiting"],
                 timeout=600,
             )
-            app = self.jhelper.get_application("openstack-network-agents", self.model)
-            if not app.units:
-                return Result(
-                    ResultType.FAILED,
-                    "openstack-network-agents has no units; juju-info integration may be missing.",
-                )
             return Result(ResultType.COMPLETED)
         except Exception as e:
             LOG.error("Failed ensuring openstack-network-agents is ready: %s", e, exc_info=True)
