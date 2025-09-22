@@ -70,7 +70,7 @@ def test_dpdk(
     )
     assert dpdk_initialized.strip() == "true"
 
-    instance_name = "sunbeam-sriov-test"
+    instance_name = "sunbeam-dpdk-test"
     instance = openstack_demo_session.create_server(
         instance_name,
         image="ubuntu",
