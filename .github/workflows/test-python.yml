@@ -42,4 +42,4 @@ jobs:
           sudo snap install astral-uv --channel latest/stable --classic
       - name: Run tests
         working-directory: ./sunbeam-python
-        run: tox -e py3
+        run: tox -e unit
