@@ -181,6 +181,24 @@ def is_hw_offload_available(ifname: str) -> bool:
         return False
 
 
+def ensure_hw_offload_enabled(ifname: str):
+    cmd = ["sudo", "ethtool", "-K", ifname, "hw-tc-offload", "on"]
+    subprocess.check_call(cmd, text=True)
+
+    pci_address = get_iface_pci_address(ifname)
+    cmd = [
+        "sudo",
+        "devlink",
+        "dev",
+        "eswitch",
+        "set",
+        f"pci/{pci_address}",
+        "mode",
+        "switchdev",
+    ]
+    subprocess.check_call(cmd, text=True)
+
+
 def get_physfn_address(address: str) -> str:
     """Get the corresponding PF PCI address for a given VF."""
     path = f"/sys/bus/pci/devices/{address}/physfn"
