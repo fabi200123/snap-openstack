@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2023 - Canonical Ltd
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
+import json
 import textwrap
 from unittest.mock import mock_open, patch
 
@@ -161,3 +163,124 @@ class TestUtils:
         generate_password = mocker.patch("sunbeam.utils.generate_password")
         generate_password.return_value = "abcdefghijkl"
         assert utils.generate_password() == "abcdefghijkl"
+
+    def test_get_local_cidr_matching_token_success(self, mocker):
+        """Test successful CIDR resolution from join token."""
+        mock_get_local_cidr = mocker.patch(
+            "sunbeam.utils.get_local_cidr_from_ip_address"
+        )
+        mock_get_local_cidr.return_value = "192.168.1.0/24"
+
+        token_data = {"join_addresses": ["192.168.1.100:8080", "10.0.0.100:8080"]}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        result = utils.get_local_cidr_matching_token(token_b64)
+
+        assert result == "192.168.1.0/24"
+        mock_get_local_cidr.assert_called_once_with("192.168.1.100")
+
+    def test_get_local_cidr_matching_token_fallback_to_second_address(self, mocker):
+        """Test fallback to second address when first fails."""
+        mock_get_local_cidr = mocker.patch(
+            "sunbeam.utils.get_local_cidr_from_ip_address"
+        )
+        mock_get_local_cidr.side_effect = [ValueError("No match"), "10.0.0.0/24"]
+
+        token_data = {"join_addresses": ["192.168.1.100:8080", "10.0.0.100:8080"]}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        result = utils.get_local_cidr_matching_token(token_b64)
+
+        assert result == "10.0.0.0/24"
+        assert mock_get_local_cidr.call_count == 2
+        mock_get_local_cidr.assert_any_call("192.168.1.100")
+        mock_get_local_cidr.assert_any_call("10.0.0.100")
+
+    def test_get_local_cidr_matching_token_ipv6_address(self, mocker):
+        """Test with IPv6 addresses in join token."""
+        mock_get_local_cidr = mocker.patch(
+            "sunbeam.utils.get_local_cidr_from_ip_address"
+        )
+        mock_get_local_cidr.return_value = "2001:db8::/64"
+
+        token_data = {"join_addresses": ["[2001:db8::1]:8080", "192.168.1.100:8080"]}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        result = utils.get_local_cidr_matching_token(token_b64)
+
+        assert result == "2001:db8::/64"
+        mock_get_local_cidr.assert_called_once_with("[2001:db8::1]")
+
+    def test_get_local_cidr_matching_token_no_port_in_address(self, mocker):
+        """Test with address that has no port."""
+        mock_get_local_cidr = mocker.patch(
+            "sunbeam.utils.get_local_cidr_from_ip_address"
+        )
+        mock_get_local_cidr.return_value = "192.168.1.0/24"
+
+        token_data = {"join_addresses": ["192.168.1.100", "10.0.0.100:8080"]}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        result = utils.get_local_cidr_matching_token(token_b64)
+
+        assert result == "192.168.1.0/24"
+        mock_get_local_cidr.assert_called_once_with("192.168.1.100")
+
+    def test_get_local_cidr_matching_token_no_matching_networks(self, mocker):
+        """Test when no local networks match any join addresses."""
+        mock_get_local_cidr = mocker.patch(
+            "sunbeam.utils.get_local_cidr_from_ip_address"
+        )
+        mock_get_local_cidr.side_effect = ValueError("No local CIDR found")
+
+        token_data = {"join_addresses": ["192.168.1.100:8080", "10.0.0.100:8080"]}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        with pytest.raises(
+            ValueError, match="No local networks found matching join token addresses"
+        ):
+            utils.get_local_cidr_matching_token(token_b64)
+
+        assert mock_get_local_cidr.call_count == 2
+        mock_get_local_cidr.assert_any_call("192.168.1.100")
+        mock_get_local_cidr.assert_any_call("10.0.0.100")
+
+    def test_get_local_cidr_matching_token_empty_join_addresses(self):
+        """Test with empty join_addresses list."""
+        token_data = {"join_addresses": []}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        with pytest.raises(
+            ValueError, match="No local networks found matching join token addresses"
+        ):
+            utils.get_local_cidr_matching_token(token_b64)
+
+    def test_get_local_cidr_matching_token_invalid_base64(self):
+        """Test with invalid base64 token."""
+        invalid_token = "invalid-base64!"
+
+        with pytest.raises(Exception):
+            utils.get_local_cidr_matching_token(invalid_token)
+
+    def test_get_local_cidr_matching_token_invalid_json(self):
+        """Test with invalid JSON in token."""
+        invalid_json = "not-json"
+        token_b64 = base64.b64encode(invalid_json.encode()).decode()
+
+        with pytest.raises(json.JSONDecodeError):
+            utils.get_local_cidr_matching_token(token_b64)
+
+    def test_get_local_cidr_matching_token_missing_join_addresses_key(self):
+        """Test with token missing join_addresses key."""
+        token_data = {"other_key": "value"}
+        token_json = json.dumps(token_data)
+        token_b64 = base64.b64encode(token_json.encode()).decode()
+
+        with pytest.raises(KeyError):
+            utils.get_local_cidr_matching_token(token_b64)

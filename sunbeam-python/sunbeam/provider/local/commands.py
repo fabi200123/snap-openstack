@@ -680,14 +680,10 @@ def bootstrap(
     management_cidr = get_step_message(results, AskManagementCidrStep)
 
     try:
-        local_management_ip = utils.get_local_ip_by_cidr(management_cidr)
-    except ValueError:
-        LOG.debug(
-            "Failed to find local address matching join token addresses"
-            ", picking local address from default route",
-            exc_info=True,
-        )
-        local_management_ip = utils.get_local_cidr_by_default_route()
+        local_management_ip = _resolve_local_ip_from_cidr(management_cidr)
+    except ValueError as e:
+        LOG.error(f"Error resolving local management ip from cidr: {e}")
+        raise click.ClickException("Cannot resolve local management ip") from e
 
     plan: list[BaseStep] = []
     plan.append(
@@ -1202,16 +1198,18 @@ def join(
 
     run_preflight_checks(preflight_checks, console)
 
+    management_cidr = None
     try:
         management_cidr = utils.get_local_cidr_matching_token(token)
-        ip = utils.get_local_ip_by_cidr(management_cidr)
-    except ValueError:
+    except ValueError as e:
         LOG.debug(
-            "Failed to find local address matching join token addresses"
-            ", picking local address from default route",
+            "Failed to find local cidr matching join token addresses",
             exc_info=True,
         )
-        ip = utils.get_local_cidr_by_default_route()
+        raise click.ClickException(
+            f"Error in resolving management CIDR: {str(e)}"
+        ) from e
+    ip = _resolve_local_ip_from_cidr(management_cidr)
 
     deployment: LocalDeployment = ctx.obj
     client = deployment.get_client()
@@ -1438,6 +1436,19 @@ def join(
     run_plan(plan4, console, show_hints)
 
     click.echo(f"Node joined cluster with roles: {pretty_roles}")
+
+
+def _resolve_local_ip_from_cidr(cidr: str) -> str:
+    try:
+        local_ip = utils.get_local_ip_by_cidr(cidr)
+    except ValueError:
+        LOG.debug(
+            "Failed to find local address matching management CIDR %s",
+            cidr,
+            exc_info=True,
+        )
+        raise
+    return local_ip
 
 
 @click.command("list")
