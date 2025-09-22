@@ -872,56 +872,6 @@ def bootstrap(
                 manifest,
             )
         )
-        # Now that OpenStack is deployed, deploy MicroOVN so CMR offers exist
-        microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
-        plan1.append(TerraformInitStep(microovn_tfhelper))
-        plan1.append(
-            DeployMicroOVNApplicationStep(
-                deployment,
-                client,
-                microovn_tfhelper,
-                openstack_tfhelper,
-                jhelper,
-                manifest,
-                deployment.openstack_machines_model,
-            )
-        )
-        if is_network_node:
-            plan1.append(
-                AddMicroOVNUnitsStep(
-                    client, fqdn, jhelper, deployment.openstack_machines_model
-                )
-            )
-            plan1.append(
-                ReapplyMicroOVNOptionalIntegrationsStep(
-                    deployment,
-                    client,
-                    microovn_tfhelper,
-                    openstack_tfhelper,
-                    jhelper,
-                    manifest,
-                    deployment.openstack_machines_model,
-                    refresh=True,
-                )
-            )
-            plan1.append(
-                EnsureOpenStackNetworkAgentsDeployedStep(
-                    jhelper, deployment.openstack_machines_model, channel="latest/edge"
-                )
-            )
-            plan1.append(
-                LocalConfigureOpenStackNetworkAgentsStep(
-                    client,
-                    fqdn,
-                    jhelper,
-                    deployment.openstack_machines_model,
-                    manifest,
-                    accept_defaults,
-                    bridge_name="br-ex",
-                    physnet_name="physnet1",
-                    enable_chassis_as_gw=True,
-                )
-            )
         # Redeploy of Microceph is required to fill terraform vars
         # related to traefik-rgw/keystone-endpoints offers from
         # openstack model
@@ -1428,57 +1378,63 @@ def join(
     plan4.append(TerraformInitStep(hypervisor_tfhelper))
     microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
     if is_network_node:
-            plan4.append(
-                DeployMicroOVNApplicationStep(
-                    deployment,
-                    client,
-                    deployment.get_tfhelper("microovn-plan"),
-                    openstack_tfhelper,
-                    jhelper,
-                    manifest,
-                    deployment.openstack_machines_model,
-                )
+        microovn_tfhelper = deployment.get_tfhelper("microovn-plan")
+        plan4.append(
+            DeployMicroOVNApplicationStep(
+                deployment,
+                client,
+                microovn_tfhelper,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
             )
-            plan4.append(
-                ConfigureMicroOVNStep(
-                    client,
-                    name,
-                    jhelper,
-                    deployment.openstack_machines_model,
-                    accept_defaults=accept_defaults,
-                    manifest=manifest,
-                )
+        )
+        plan4.append(
+            ConfigureMicroOVNStep(
+                client,
+                name,
+                jhelper,
+                deployment.openstack_machines_model,
+                accept_defaults=accept_defaults,
+                manifest=manifest,
             )
-            plan4.append(
-                AddMicroOVNUnitsStep(
-                    client, name, jhelper, deployment.openstack_machines_model
-                )
+        )
+        plan4.append(
+            AddMicroOVNUnitsStep(
+                client, name, jhelper, deployment.openstack_machines_model
             )
-            plan4.append(
-                ReapplyMicroOVNOptionalIntegrationsStep(
-                    deployment,
-                    client,
-                    microovn_tfhelper,
-                    openstack_tfhelper,
-                    jhelper,
-                    manifest,
-                    deployment.openstack_machines_model,
-                    refresh=True,
-                )
+        )
+        plan4.append(
+            ReapplyMicroOVNOptionalIntegrationsStep(
+                deployment,
+                client,
+                microovn_tfhelper,
+                openstack_tfhelper,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+                refresh=True,
             )
-            plan4.append(
-                LocalConfigureOpenStackNetworkAgentsStep(
-                    client,
-                    name,
-                    jhelper,
-                    deployment.openstack_machines_model,
-                    manifest,
-                    accept_defaults,
-                    bridge_name="br-ex",
-                    physnet_name="physnet1",
-                    enable_chassis_as_gw=True,
-                )
+        )
+        plan4.append(
+            EnsureOpenStackNetworkAgentsDeployedStep(
+                jhelper, deployment.openstack_machines_model, channel="latest/edge"
             )
+        )
+        plan4.append(
+            LocalConfigureOpenStackNetworkAgentsStep(
+                client,
+                name,
+                jhelper,
+                deployment.openstack_machines_model,
+                manifest,
+                accept_defaults,
+                bridge_name="br-ex",
+                physnet_name="physnet1",
+                enable_chassis_as_gw=True,
+            )
+        )
 
     if is_storage_node:
         plan4.append(

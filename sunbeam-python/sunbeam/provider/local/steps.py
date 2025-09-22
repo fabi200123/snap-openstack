@@ -1001,5 +1001,9 @@ class EnsureOpenStackNetworkAgentsDeployedStep(BaseStep, JujuStepHelper):
             )
             return Result(ResultType.COMPLETED)
         except Exception as e:
-            LOG.error("Failed ensuring openstack-network-agents is ready: %s", e, exc_info=True)
+            LOG.error(
+                "Failed ensuring openstack-network-agents is ready: %s",
+                e,
+                exc_info=True,
+            )
             return Result(ResultType.FAILED, str(e))
