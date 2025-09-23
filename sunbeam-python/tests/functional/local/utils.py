@@ -125,38 +125,8 @@ def apply_manifest(
         f.write(yaml.dump(manifest))
 
 
-def get_sunbeam_manifest_list() -> list:
-    deployment_info = get_sunbeam_deployments() or {}
-    if not deployment_info.get("active"):
-        logging.info("No active Sunbeam deployment.")
-        return []
-
-    manifests_list_yaml = sunbeam_command("manifest list -f yaml", capture_output=True)
-    if not manifests_list_yaml:
-        return []
-
-    return yaml.safe_load(io.StringIO(str(manifests_list_yaml)))
-
-
-def get_latest_sunbeam_manifest_id() -> str:
-    try:
-        manifests = get_sunbeam_manifest_list()
-    except Exception as ex:
-        # Maybe the cluster wasn't bootstrapped yet.
-        logging.debug("Couldn't obtain the list of manifests, exception: %s", ex)
-        return ""
-    sorted_manifests = sorted(manifests, key=lambda x: x["applieddate"])
-    return sorted_manifests[-1]["manifestid"]
-
-
 def get_latest_sunbeam_manifest() -> str:
-    manifest_id = get_latest_sunbeam_manifest_id()
-    if not manifest_id:
-        logging.info("No manifest found.")
-        return ""
-
-    logging.info("Using the latest manifest: %s", manifest_id)
-    manifest = sunbeam_command(f"manifest show {manifest_id}", capture_output=True)
+    manifest = sunbeam_command("manifest show latest", capture_output=True)
     return str(manifest or "")
 
 
