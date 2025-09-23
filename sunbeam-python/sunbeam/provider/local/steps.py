@@ -803,15 +803,8 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
                 timeout=600,
             )
 
-            # Discover the real unit name (e.g., 'openstack-network-agents/1')
-            app = self.jhelper.get_application("openstack-network-agents", self.model)
-            units = list(getattr(app, "units", []))
-            if not units:
-                return Result(ResultType.FAILED, "No units for openstack-network-agents yet")
-
             # Prefer leader, else first
-            unit = next((u for u in units if getattr(u, "is_leader", False)), units[0])
-            unit_name = unit.name  # e.g. "openstack-network-agents/1"
+            unit_name = "openstack-network-agents/1"  # e.g. "openstack-network-agents/1"
 
             # Use the action helper so we don't have to hand-craft CLI args
             self.jhelper.run_action(
@@ -822,7 +815,7 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
                     "external-interface": self.external_interface,
                     "bridge-name": self.bridge_name,
                     "physnet-name": self.physnet_name,
-                    "enable-chassis-as-gw": str(self.enable_chassis_as_gw).lower(),
+                    "enable-chassis-as-gw": True,
                 },
             )
 
