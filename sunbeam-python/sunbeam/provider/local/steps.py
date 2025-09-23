@@ -796,32 +796,55 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
 
     def run(self, status: Status | None = None) -> Result:
         try:
-            # Ensure app exists and is in a usable state
             self.jhelper.wait_application_ready(
                 "openstack-network-agents",
                 self.model,
                 accepted_status=["active", "blocked", "waiting"],
                 timeout=600,
             )
-            self.jhelper.get_application("openstack-network-agents", self.model)
 
-            # Set charm config (no subprocess, no actions)
-            with self.jhelper._model(self.model) as juju:
-                args = [
-                    "config",
-                    "openstack-network-agents",
-                    f"external-interface={self.external_interface}",
-                    f"bridge-name={self.bridge_name}",
-                    f"physnet-name={self.physnet_name}",
-                    f"enable-chassis-as-gw={str(self.enable_chassis_as_gw).lower()}",
-                ]
-                self.jhelper.cli(*args, juju=juju, json_format=False)
+            # Discover the real unit name (e.g., 'openstack-network-agents/1')
+            app = self.jhelper.get_application("openstack-network-agents", self.model)
+            units = list(getattr(app, "units", []))
+            if not units:
+                return Result(ResultType.FAILED, "No units for openstack-network-agents yet")
+
+            # Prefer leader, else first
+            unit = next((u for u in units if getattr(u, "is_leader", False)), units[0])
+            unit_name = unit.name  # e.g. "openstack-network-agents/1"
+
+            # Use the action helper so we don't have to hand-craft CLI args
+            self.jhelper.run_action(
+                unit_name,
+                self.model,
+                "set-network-agents-local-settings",
+                action_params={
+                    "external-interface": self.external_interface,
+                    "bridge-name": self.bridge_name,
+                    "physnet-name": self.physnet_name,
+                    "enable-chassis-as-gw": str(self.enable_chassis_as_gw).lower(),
+                },
+            )
 
             return Result(ResultType.COMPLETED)
+
         except Exception as e:
-            LOG.debug("Failed to configure openstack-network-agents: %s", e, exc_info=True)
+            LOG.debug("Failed to configure openstack-network-agents via action: %s", e, exc_info=True)
             return Result(ResultType.FAILED, "Failed to configure openstack-network-agents")
 
+
+
+def network_node_questions():
+    return {
+        "external_interface": sunbeam.core.questions.PromptQuestion(
+            "External network's interface",
+            description=(
+                "Interface used by networking layer to allow remote access to cloud"
+                " instances. This interface must be unconfigured"
+                " (no IP address assigned) and connected to the external network."
+            ),
+        ),
+    }
 
 class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
     """Prompt for external interface (or use manifest) and configure agents.
@@ -859,88 +882,8 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
         self.physnet_name = physnet_name
         self.enable_chassis_as_gw = enable_chassis_as_gw
 
-    def _get_manifest_nic(self) -> str | None:
-        if not self.manifest:
-            return None
-        ext = self.manifest.core.config.external_network
-        if not ext:
-            return None
-        if ext.nics and self.node_name in ext.nics:
-            return ext.nics[self.node_name]
-        # deprecated single nic fallback
-        if ext.nic:
-            LOG.warning("DEPRECATED: Using deprecated `external_network.nic` field")
-            return ext.nic
-        return None
-
-    def _get_answers_nic(self) -> str | None:
-        """Reuse external NIC from previously saved answers (hypervisor step)."""
-        try:
-            from sunbeam.commands.configure import CLOUD_CONFIG_SECTION
-            answers = sunbeam.core.questions.load_answers(self.client, CLOUD_CONFIG_SECTION) or {}
-        except Exception:
-            return None
-        # Accept both {"external_network":{"nics":{"host":"nic"}}} and legacy {"nic":"..."}
-        ext = (answers.get("external_network")
-               or answers.get("user", {}).get("external_network")
-               or answers)
-        if isinstance(ext, dict):
-            host_map = ext.get("nics") or {}
-            if isinstance(host_map, dict) and self.node_name in host_map:
-                return host_map[self.node_name]
-            return ext.get("nic")
-        return None
-
-    def prompt(self, console: Console | None = None, show_hint: bool = False) -> None:
-        # 1) manifest
-        nic = self._get_manifest_nic()
-        if nic:
-            self.external_interface = nic
-            return
-
-        # 2) previously answered config
-        nic = self._get_answers_nic()
-        if nic:
-            self.external_interface = nic
-            return
-
-        # 3) accept-defaults: auto-pick first unconfigured NIC
-        if self.accept_defaults:
-            try:
-                nics = nic_utils.fetch_nics(self.client, self.node_name, self.jhelper, self.model)
-                for i in (nics.get("nics") or []):
-                    if i.get("name") and not i.get("configured"):
-                        self.external_interface = i["name"]
-                        LOG.info("Auto-selected external interface %s (accept-defaults)", self.external_interface)
-                        return
-            except Exception:
-                pass
-            return  # nothing found; run() will SKIP
-
-        # 4) interactive prompt
-        if not console:
-            return
-        with console.status("Fetching candidate nics for external network"):
-            nics = nic_utils.fetch_nics(self.client, self.node_name, self.jhelper, self.model)
-        all_nics: list[dict] = nics.get("nics") or []
-        candidate_nics: list[str] = [n.get("name") for n in all_nics if n.get("name")]
-        if not candidate_nics:
-            return
-        question = sunbeam.core.questions.PromptQuestion(
-            "External gateway interface",
-            description=("Interface to use for the external gateway (will be bound by OVS)."),
-        )
-        self.external_interface = question.ask(new_choices=candidate_nics)
-
     def run(self, status: Status | None = None) -> Result:
-        # last-chance lookups
-        self.external_interface = (
-            self.external_interface
-            or self._get_manifest_nic()
-            or self._get_answers_nic()
-        )
-        if not self.external_interface:
-            return Result(ResultType.SKIPPED, "external-interface not provided")
+        self.external_interface = "ens19"
 
         step = ConfigureOpenStackNetworkAgentsLocalSettingsStep(
             jhelper=self.jhelper,
