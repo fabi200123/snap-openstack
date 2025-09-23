@@ -57,18 +57,35 @@ def test_dpdk(
         for mem_numa in dpdk_memory_numa[1:]:
             assert mem_numa == "0"
 
-    dpdk_initialized = subprocess.check_output(
-        [
-            "sudo",
-            "openstack-hypervisor.ovs-vsctl",
-            "get",
-            "Open_vSwitch",
-            ".",
-            "dpdk_initialized",
-        ],
-        text=True,
-    )
-    assert dpdk_initialized.strip() == "true"
+    # It may take a few moments for DPDK to be initialized. As such,
+    # we'll perform a few retries.
+    dpdk_init_retries = 12
+    dpdk_init_check_interval = 5
+    dpdk_initialized = False
+    for attempt in range(dpdk_init_retries):
+        dpdk_initialized = (
+            subprocess.check_output(
+                [
+                    "sudo",
+                    "openstack-hypervisor.ovs-vsctl",
+                    "get",
+                    "Open_vSwitch",
+                    ".",
+                    "dpdk_initialized",
+                ],
+                text=True,
+            ).strip()
+            == "true"
+        )
+        if dpdk_initialized:
+            logging.info("OVS DPDK initialized.")
+            break
+        else:
+            logging.info("OVS DPDK not initialized yet.")
+            if attempt < dpdk_init_retries - 1:
+                logging.debug("Rechecking in %s seconds.", dpdk_init_check_interval)
+                time.sleep(dpdk_init_check_interval)
+    assert dpdk_initialized, "OVS DPDK did not initialize in time."
 
     instance_name = "sunbeam-dpdk-test"
     instance = openstack_demo_session.create_server(
