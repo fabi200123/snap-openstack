@@ -41,22 +41,6 @@ def test_dpdk(
         f"-v configure dpdk -m {dpdk_manifest_path} --accept-defaults"
     )
 
-    ovs_config = utils.ovs_vsctl_list_table("Open_vSwitch", ".", ["other-config"])
-    assert ovs_config["other_config"]["dpdk-init"] == "try"
-
-    dpdk_memory = ovs_config["other_config"]["dpdk-socket-mem"]
-    dpdk_lcore_mask = ovs_config["other_config"]["dpdk-lcore-mask"]
-    pmd_cpu_mask = ovs_config["other_config"]["dpdk-lcore-mask"]
-
-    assert 1 == len(utils.bitmask_to_core_list(int(dpdk_lcore_mask, 16)))
-    assert 1 == len(utils.bitmask_to_core_list(int(pmd_cpu_mask, 16)))
-
-    dpdk_memory_numa = dpdk_memory.split(",")
-    assert dpdk_memory_numa[0] == "1024"
-    if len(dpdk_memory_numa) > 0:
-        for mem_numa in dpdk_memory_numa[1:]:
-            assert mem_numa == "0"
-
     # It may take a few moments for DPDK to be initialized. As such,
     # we'll perform a few retries.
     dpdk_init_retries = 12
@@ -86,6 +70,22 @@ def test_dpdk(
                 logging.debug("Rechecking in %s seconds.", dpdk_init_check_interval)
                 time.sleep(dpdk_init_check_interval)
     assert dpdk_initialized, "OVS DPDK did not initialize in time."
+
+    ovs_config = utils.ovs_vsctl_list_table("Open_vSwitch", ".", ["other-config"])
+    assert ovs_config["other_config"]["dpdk-init"] == "try"
+
+    dpdk_memory = ovs_config["other_config"]["dpdk-socket-mem"]
+    dpdk_lcore_mask = ovs_config["other_config"]["dpdk-lcore-mask"]
+    pmd_cpu_mask = ovs_config["other_config"]["dpdk-lcore-mask"]
+
+    assert 1 == len(utils.bitmask_to_core_list(int(dpdk_lcore_mask, 16)))
+    assert 1 == len(utils.bitmask_to_core_list(int(pmd_cpu_mask, 16)))
+
+    dpdk_memory_numa = dpdk_memory.split(",")
+    assert dpdk_memory_numa[0] == "1024"
+    if len(dpdk_memory_numa) > 0:
+        for mem_numa in dpdk_memory_numa[1:]:
+            assert mem_numa == "0"
 
     instance_name = "sunbeam-dpdk-test"
     instance = openstack_demo_session.create_server(
