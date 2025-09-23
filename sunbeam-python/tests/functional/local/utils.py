@@ -101,21 +101,33 @@ def apply_manifest(
     destination_manifest_path: str,
     manifest_updates: dict,
     base_manifest_path: str | None = None,
+    use_latest_manifest: bool = True,
 ):
     """Write a manifest to the specified location.
 
     Can receive a base manifest path and a dict of updates that
     will be applied on top.
+
+    If "use_latest_manifest" is set and no base manifest is provided,
+    the updates will be applied to the latest manifest from Sunbeam.
     """
     manifest = {}
     if base_manifest_path:
         with open(base_manifest_path) as f:
             manifest = yaml.safe_load(f)
+    elif use_latest_manifest:
+        manifest_data = get_latest_sunbeam_manifest()
+        manifest = yaml.safe_load(io.StringIO(manifest_data or "")) or {}
 
     manifest = sunbeam_utils.merge_dict(manifest, manifest_updates)
 
     with open(destination_manifest_path, "w") as f:
         f.write(yaml.dump(manifest))
+
+
+def get_latest_sunbeam_manifest() -> str:
+    manifest = sunbeam_command("manifest show latest", capture_output=True)
+    return str(manifest or "")
 
 
 def get_sriov_numvfs(address: str) -> int:
