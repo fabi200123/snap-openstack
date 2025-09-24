@@ -254,7 +254,7 @@ class CoreConfig(pydantic.BaseModel):
         # MB
         memory: int = 0
         driver: str = "vfio-pci"
-        ports: dict[str, list[str]]
+        ports: dict[str, list[str]] | None = None
 
     proxy: _ProxyConfig | None = None
     bootstrap: _BootstrapConfig | None = None
