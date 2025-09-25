@@ -352,7 +352,7 @@ class VerifyFQDNCheck(Check):
         label_regex = re.compile(r"^[a-z0-9-]*$", re.IGNORECASE)
 
         for label in labels:
-            if not 1 < len(label) < 63:
+            if not 1 <= len(label) <= 63:
                 self.message = (
                     "A label in a FQDN cannot be empty or longer than 63 characters"
                 )
