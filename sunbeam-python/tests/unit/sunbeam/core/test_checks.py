@@ -144,6 +144,7 @@ class TestVerifyFQDNCheck:
         result = check.run()
 
         assert result is False
+        assert "cannot be empty" in check.message
 
     def test_run_fqdn_too_long(self):
         name = "myhost.mydomain.net" * 50
@@ -152,6 +153,32 @@ class TestVerifyFQDNCheck:
         result = check.run()
 
         assert result is False
+        assert "longer than 255 characters" in check.message
+
+    def test_run_fqdn_single_character_label(self):
+        name = "sunbeam.a.example.com"
+        check = checks.VerifyFQDNCheck(name)
+
+        result = check.run()
+
+        assert result is True
+
+    def test_run_fqdn_label_exactly_63_chars(self):
+        name = "a" * 63 + ".example.com"
+        check = checks.VerifyFQDNCheck(name)
+
+        result = check.run()
+
+        assert result is True
+
+    def test_run_fqdn_label_exceed_63_chars(self):
+        name = "a" * 64 + ".example.com"
+        check = checks.VerifyFQDNCheck(name)
+
+        result = check.run()
+
+        assert result is False
+        assert "longer than 63 characters" in check.message
 
 
 class TestSystemRequirementsCheck:
