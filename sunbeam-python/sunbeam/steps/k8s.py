@@ -382,18 +382,24 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
         Raises K8SError if client not able to get nodes
         from k8s.
         """
+        LOG.debug(f"Matching K8S Node with name {hostname} and IPs {ips}")
+        hostname_without_domain = hostname.split(".")[0]
         k8s_nodes = list_nodes(
             self.kube, labels={DEPLOYMENT_LABEL: self.deployment.name}
         )
+        LOG.debug(f"K8S nodes filtered by deployment label: {k8s_nodes}")
 
         for k8s_node in k8s_nodes:
             if k8s_node.metadata is None:
                 LOG.debug("K8S node has no metadata, %s", k8s_node)
                 continue
 
-            if k8s_node.metadata.name == hostname:
+            # Check for hostname with and without fqdn
+            if k8s_node.metadata.name in [hostname, hostname_without_domain]:
                 return k8s_node
 
+            # Label should be always what is present in sunbeamd, so just
+            # use hostname to filter
             if (
                 k8s_node.metadata.labels
                 and k8s_node.metadata.labels.get(HOSTNAME_LABEL) == hostname
@@ -403,13 +409,14 @@ class EnsureK8SUnitsTaggedStep(BaseStep):
             if k8s_node.status is None or k8s_node.status.addresses is None:
                 LOG.debug("K8S node has no status nor addresses, %s", k8s_node)
                 continue
+
             for ip in ips:
                 for address in k8s_node.status.addresses:
                     if address.type == "InternalIP":
                         if address.address == ip:
                             return k8s_node
                     if address.type == "Hostname":
-                        if address.address == hostname:
+                        if address.address in [hostname, hostname_without_domain]:
                             return k8s_node
 
         raise ValueError("No K8s node matched")

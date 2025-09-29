@@ -764,6 +764,39 @@ class TestEnsureK8SUnitsTaggedStep(unittest.TestCase):
         assert result.result_type == ResultType.COMPLETED
         assert "node2" in self.step.to_update
 
+    def test_is_skip_nodes_to_update_with_fqdn(self):
+        control_nodes = [
+            {"name": "node1.maas", "machineid": "1"},
+            {"name": "node2.maas", "machineid": "2"},
+        ]
+        self.client.cluster.list_nodes_by_role.return_value = control_nodes
+        self.kube.list.return_value = [
+            _to_kube_object(
+                {"name": "node1", "labels": {"sunbeam/hostname": "node1"}},
+                status={"addresses": [Mock(type="InternalIP", address="10.0.0.1")]},
+            ),
+            _to_kube_object(
+                {"name": "node2", "labels": {}},  # Missing label
+                status={"addresses": [Mock(type="InternalIP", address="10.0.0.2")]},
+            ),
+        ]
+        self.jhelper.get_machines.return_value = {
+            "1": Mock(
+                network_interfaces={
+                    "eth0": Mock(space="management", ip_addresses=["10.0.0.1"])
+                }
+            ),
+            "2": Mock(
+                network_interfaces={
+                    "eth0": Mock(space="management", ip_addresses=["10.0.0.2"])
+                }
+            ),
+        }
+        with patch("sunbeam.steps.k8s.get_kube_client", return_value=self.kube):
+            result = self.step.is_skip()
+        assert result.result_type == ResultType.COMPLETED
+        assert "node2.maas" in self.step.to_update
+
     def test_is_skip_kube_client_error(self):
         self.client.cluster.list_nodes_by_role.return_value = []
         with patch(
