@@ -615,7 +615,11 @@ def deploy(
         map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.STORAGE.value))
     )
     nb_storage = len(storage)
-    workers = list(set(compute + control + storage))
+    network = list(
+        map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.NETWORK.value))
+    )
+    nb_network = len(network)
+    workers = list(set(compute + control + storage + network))
 
     if nb_control < 1 or nb_compute < 1 or nb_storage < 1:
         console.print(
@@ -844,7 +848,7 @@ def deploy(
 
     console.print(
         f"Deployment complete with {nb_control} control,"
-        f" {nb_compute} compute and {nb_storage} storage nodes."
+        f" {nb_compute} compute, {nb_storage} storage and {nb_network} network nodes."
         f" Total nodes in cluster: {len(workers)}"
     )
 

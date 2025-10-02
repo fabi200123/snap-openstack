@@ -39,6 +39,7 @@ class RoleTags(enum.Enum):
     CONTROL = "control"
     COMPUTE = "compute"
     STORAGE = "storage"
+    NETWORK = "network"
     JUJU_CONTROLLER = "juju-controller"
     SUNBEAM = "sunbeam"
 
@@ -68,6 +69,12 @@ ROLE_NETWORK_MAPPING = {
         Networks.STORAGE,
         Networks.STORAGE_CLUSTER,
     ],
+    RoleTags.NETWORK: [
+        Networks.DATA,
+        Networks.INTERNAL,
+        Networks.MANAGEMENT,
+        Networks.PUBLIC,
+    ],
     RoleTags.JUJU_CONTROLLER: [
         Networks.MANAGEMENT,
     ],
@@ -88,6 +95,15 @@ class StorageTags(enum.Enum):
 
 class NicTags(enum.Enum):
     COMPUTE = "neutron:physnet1"
+
+    @classmethod
+    def values(cls) -> list[str]:
+        """Return list of tag values."""
+        return [tag.value for tag in cls]
+
+
+class NetworkTags(enum.Enum):
+    NETWORK = "network"
 
     @classmethod
     def values(cls) -> list[str]:

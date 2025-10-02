@@ -71,7 +71,7 @@ from sunbeam.steps.juju import (
     ScaleJujuStep,
 )
 from sunbeam.steps.openstack import EndpointsConfigurationStep
-from sunbeam.versions import JUJU_BASE
+from sunbeam.versions import JUJU_BASE, determine_version
 
 if typing.TYPE_CHECKING:
     from maas.client import bones  # type: ignore [import-untyped]
@@ -383,6 +383,60 @@ class MachineStorageCheck(DiagnosticsCheck):
         )
 
 
+class MachineNetworkTagCheck(DiagnosticsCheck):
+    """Check machine has network tag assigned if required."""
+
+    def __init__(self, machine: dict):
+        super().__init__(
+            "Network tag check",
+            "Checking network tag",
+        )
+        self.machine = machine
+
+    def run(self) -> DiagnosticsResult:
+        """Check machine has network tag if required."""
+        assigned_roles = self.machine["roles"]
+        LOG.debug(f"{self.machine['hostname']=!r} assigned roles: {assigned_roles!r}")
+        if not assigned_roles:
+            return DiagnosticsResult.fail(
+                self.name,
+                "machine has no role assigned.",
+                ROLES_NEEDED_ERROR,
+                machine=self.machine["hostname"],
+            )
+        if maas_deployment.RoleTags.NETWORK.value not in assigned_roles:
+            self.message = "not a network node."
+            return DiagnosticsResult.success(
+                self.name,
+                self.message,
+                machine=self.machine["hostname"],
+            )
+
+        # Check if machine has the network tag
+        machine_tags = self.machine.get("tags", [])
+        network_tag = maas_deployment.NetworkTags.NETWORK.value
+        if network_tag not in machine_tags:
+            return DiagnosticsResult.fail(
+                self.name,
+                "network node missing network tag",
+                textwrap.dedent(
+                    f"""\
+                    A network node needs to have the network tag to be a part of
+                    an openstack deployment. Add the tag `{network_tag}` to the
+                    machine in MAAS.
+                    More on using tags: https://maas.io/docs/how-to-use-machine-tags
+                    """
+                ),
+                machine=self.machine["hostname"],
+            )
+
+        return DiagnosticsResult.success(
+            self.name,
+            f"network tag {network_tag} found",
+            machine=self.machine["hostname"],
+        )
+
+
 class MachineComputeNicCheck(DiagnosticsCheck):
     """Check machine has compute nic assigned if required."""
 
@@ -405,8 +459,19 @@ class MachineComputeNicCheck(DiagnosticsCheck):
                 machine=self.machine["hostname"],
             )
         compute_tag = maas_deployment.NicTags.COMPUTE.value
-        if maas_deployment.RoleTags.COMPUTE.value not in assigned_roles:
-            self.message = "not a compute node."
+
+        # For 2024.1, check both compute and network roles for compute NIC requirement
+        current_version = determine_version()
+        requires_compute_nic = (
+            maas_deployment.RoleTags.COMPUTE.value in assigned_roles
+            or (
+                current_version == "2024.1"
+                and maas_deployment.RoleTags.NETWORK.value in assigned_roles
+            )
+        )
+
+        if not requires_compute_nic:
+            self.message = "not a compute or network node."
             return DiagnosticsResult.success(
                 self.name,
                 self.message,
@@ -427,9 +492,11 @@ class MachineComputeNicCheck(DiagnosticsCheck):
             textwrap.dedent(
                 f"""\
                 A compute node needs to have a dedicated nic for compute to be a part
-                of an openstack deployment. Either add a compute nic to the machine or
-                remove the compute role. Add the tag `{compute_tag}`
-                to the nic in MAAS.
+                of an openstack deployment. For 2024.1, network nodes also require
+                a compute nic.
+                Either add a compute nic to the machine or remove the
+                compute/network role.
+                Add the tag `{compute_tag}` to the nic in MAAS.
                 More on assigning tags: https://maas.io/docs/how-to-use-network-tags
                 """
             ),
@@ -610,6 +677,7 @@ class DeploymentMachinesCheck(DiagnosticsCheck):
             checks.append(MachineRolesCheck(machine))
             checks.append(MachineNetworkCheck(self.deployment, machine))
             checks.append(MachineStorageCheck(machine))
+            checks.append(MachineNetworkTagCheck(machine))
             checks.append(MachineComputeNicCheck(machine))
             checks.append(MachineRootDiskCheck(machine))
             checks.append(MachineRequirementsCheck(machine))
@@ -1344,6 +1412,7 @@ class MaasAddMachinesToClusterdStep(BaseStep):
                     maas_deployment.RoleTags.CONTROL.value,
                     maas_deployment.RoleTags.COMPUTE.value,
                     maas_deployment.RoleTags.STORAGE.value,
+                    maas_deployment.RoleTags.NETWORK.value,
                 }
             ):
                 filtered_machines.append(machine)
