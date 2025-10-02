@@ -282,6 +282,7 @@ def _convert_raw_machine(machine_raw: dict, root_disk: dict | None) -> dict:
         "system_id": machine_raw["system_id"],
         "hostname": machine_raw["hostname"],
         "roles": list(set(machine_raw["tag_names"]).intersection(RoleTags.values())),
+        "tags": machine_raw["tag_names"],
         "zone": machine_raw["zone"]["name"],
         "status": machine_raw["status_name"],
         "root_disk": root_disk,

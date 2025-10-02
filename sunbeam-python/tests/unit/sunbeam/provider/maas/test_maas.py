@@ -18,6 +18,7 @@ from sunbeam.core.deployments import DeploymentsConfig
 from sunbeam.core.juju import ControllerNotFoundException
 from sunbeam.provider.maas.deployment import (
     MaasDeployment,
+    NetworkTags,
     NicTags,
     RoleTags,
     StorageTags,
@@ -38,6 +39,7 @@ from sunbeam.provider.maas.steps import (
     MaasScaleJujuStep,
     MachineComputeNicCheck,
     MachineNetworkCheck,
+    MachineNetworkTagCheck,
     MachineRequirementsCheck,
     MachineRolesCheck,
     MachineRootDiskCheck,
@@ -302,6 +304,54 @@ class TestMachineComputeNicCheck:
         assert result.passed is DiagnosticResultType.SUCCESS
         assert result.details["machine"] == "test_machine"
         assert result.message and NicTags.COMPUTE.value in result.message
+
+
+class TestMachineNetworkTagCheck:
+    def test_run_with_no_assigned_roles(self):
+        machine = {"hostname": "test_machine", "roles": [], "tags": []}
+        check = MachineNetworkTagCheck(machine)
+        result = check.run()
+        assert result.passed is DiagnosticResultType.FAILURE
+        assert result.details["machine"] == "test_machine"
+        assert result.message and "machine has no role assigned" in result.message
+
+    def test_run_with_not_network_node(self):
+        machine = {
+            "hostname": "test_machine",
+            "roles": ["compute", "storage"],
+            "tags": [],
+        }
+        check = MachineNetworkTagCheck(machine)
+        result = check.run()
+        assert result.passed is DiagnosticResultType.SUCCESS
+        assert result.details["machine"] == "test_machine"
+        assert result.message == "not a network node."
+
+    def test_run_with_network_node_missing_tag(self):
+        machine = {
+            "hostname": "test_machine",
+            "roles": [RoleTags.NETWORK.value],
+            "tags": [],
+        }
+        check = MachineNetworkTagCheck(machine)
+        result = check.run()
+        assert result.passed is DiagnosticResultType.FAILURE
+        assert result.details["machine"] == "test_machine"
+        assert result.message and "network node missing network tag" in result.message
+        assert result.diagnostics
+        assert "https://maas.io/docs/how-to-use-machine-tags" in result.diagnostics
+
+    def test_run_with_network_node_with_tag(self):
+        machine = {
+            "hostname": "test_machine",
+            "roles": [RoleTags.NETWORK.value],
+            "tags": [NetworkTags.NETWORK.value],
+        }
+        check = MachineNetworkTagCheck(machine)
+        result = check.run()
+        assert result.passed is DiagnosticResultType.SUCCESS
+        assert result.details["machine"] == "test_machine"
+        assert result.message and NetworkTags.NETWORK.value in result.message
 
 
 class TestMachineRootDiskCheck:
