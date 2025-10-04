@@ -63,6 +63,12 @@ def fetch_nics():
         yield p
 
 
+@pytest.fixture()
+def fetch_gpus():
+    with patch.object(nic_utils, "fetch_gpus") as p:
+        yield p
+
+
 class TestLocalSetHypervisorUnitsOptionsStep:
     def test_has_prompts(self, cclient, jhelper):
         step = local_steps.LocalSetHypervisorUnitsOptionsStep(
@@ -371,6 +377,11 @@ class TestLocalConfigSRIOVStep:
                         "address": "0000:3a:0.2",
                         "physical_network": None,
                     },
+                    {
+                        "address": "0000:8a:0.1",
+                        "vendor_id": "10de",
+                        "product_id": "1db4",
+                    },
                 ],
                 # Expected excluded devices
                 {
@@ -433,10 +444,78 @@ class TestLocalConfigSRIOVStep:
                         "address": "0000:0:0.1",
                         "physical_network": "physnet1",
                     },
+                    {
+                        "address": "0000:8a:0.1",
+                        "vendor_id": "10de",
+                        "product_id": "1db4",
+                    },
                 ],
                 # Expected excluded devices
                 {
                     "maas0.local": ["0000:2a:0.2"],
+                    "other-node": ["0000:0:0.2"],
+                },
+            ),
+            # --accept-defaults was passed, we're still preserving the
+            # previous values.
+            # Exclude GPU device using manifest
+            (
+                # Previous answers
+                {
+                    "pci_whitelist": [
+                        {
+                            "vendor_id": "0001",
+                            "product_id": "0001",
+                            "address": "0000:0:0.1",
+                            "physical_network": "physnet1",
+                        }
+                    ],
+                    "excluded_devices": {"other-node": ["0000:0:0.2"]},
+                },
+                # Accept defaults
+                True,
+                # Manifest dev specs
+                [
+                    # Other device, not SR-IOV
+                    {
+                        "address": {
+                            "domain": ".*",
+                            "bus": "1b",
+                            "slot": "10",
+                            "function": "[0-4]",
+                        }
+                    },
+                    {"address": ":2a:", "physical_network": "physnet2"},
+                ],
+                # Manifest excluded devices
+                {
+                    "maas0.local": ["0000:2a:0.2", "0000:8a:0.1"],
+                },
+                # Whitelist confirmation answers,
+                [True, False, True, True, True, False],
+                # Physnet prompt answers,
+                ["physnet1", "none", "physnet2", "physnet2", "physnet3"],
+                # Expected device specs
+                [
+                    {
+                        "address": {
+                            "domain": ".*",
+                            "bus": "1b",
+                            "slot": "10",
+                            "function": "[0-4]",
+                        }
+                    },
+                    {"address": ":2a:", "physical_network": "physnet2"},
+                    {
+                        "vendor_id": "0001",
+                        "product_id": "0001",
+                        "address": "0000:0:0.1",
+                        "physical_network": "physnet1",
+                    },
+                ],
+                # Expected excluded devices
+                {
+                    "maas0.local": ["0000:2a:0.2", "0000:8a:0.1"],
                     "other-node": ["0000:0:0.2"],
                 },
             ),
@@ -450,6 +529,7 @@ class TestLocalConfigSRIOVStep:
         confirm_question,
         question_bank,
         fetch_nics,
+        fetch_gpus,
         prev_answers,
         accept_defaults,
         manifest_dev_specs,
@@ -518,11 +598,19 @@ class TestLocalConfigSRIOVStep:
                 "name": "eno7",
             },
         ]
+        gpu_list = [
+            {
+                "pci_address": "0000:8a:0.1",
+                "vendor_id": "0x10de",
+                "product_id": "0x1db4",
+            },
+        ]
         load_answers.return_value = prev_answers
         fetch_nics.return_value = {
             "nics": nic_list,
             "candidates": [],
         }
+        fetch_gpus.return_value = {"gpus": gpu_list}
         sriov_question = question_bank.return_value.configure_sriov
         sriov_question.ask.return_value = True
         confirm_question.return_value.ask.side_effect = confirm_answers
@@ -552,6 +640,7 @@ class TestLocalConfigSRIOVStep:
         write_answers,
         question_bank,
         fetch_nics,
+        fetch_gpus,
     ):
         """Test that should_skip is set to True when no SR-IOV devices are detected."""
         # Mock no SR-IOV devices available
@@ -571,6 +660,7 @@ class TestLocalConfigSRIOVStep:
             "nics": nic_list,
             "candidates": [],
         }
+        fetch_gpus.return_value = {"gpus": []}
         sriov_question = question_bank.return_value.configure_sriov
         sriov_question.ask.return_value = True
 
@@ -586,6 +676,7 @@ class TestLocalConfigSRIOVStep:
         write_answers,
         question_bank,
         fetch_nics,
+        fetch_gpus,
         confirm_question,
         prompt_question,
     ):
@@ -607,6 +698,7 @@ class TestLocalConfigSRIOVStep:
             "nics": nic_list,
             "candidates": [],
         }
+        fetch_gpus.return_value = {"gpus": []}
         sriov_question = question_bank.return_value.configure_sriov
         sriov_question.ask.return_value = True
         confirm_question.return_value.ask.return_value = (
