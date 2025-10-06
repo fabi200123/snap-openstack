@@ -146,7 +146,7 @@ class DeployConsulClientStep(BaseStep):
                 },
                 {
                     "endpoint": "consul-notify",
-                    "space": self.deployment.get_space(Networks.MANAGEMENT),
+                    "space": self.deployment.get_space(Networks.DATA),
                 },
             ]
         else:
@@ -171,7 +171,7 @@ class DeployConsulClientStep(BaseStep):
                 },
                 {
                     "endpoint": "consul-notify",
-                    "space": self.deployment.get_space(Networks.MANAGEMENT),
+                    "space": self.deployment.get_space(Networks.STORAGE),
                 },
             ]
         else:
