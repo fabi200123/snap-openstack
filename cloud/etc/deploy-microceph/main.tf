@@ -6,7 +6,7 @@ terraform {
   required_providers {
     juju = {
       source  = "juju/juju"
-      version = "= 0.23.0"
+      version = "= 0.20.0"
     }
   }
 
@@ -40,17 +40,8 @@ resource "juju_application" "microceph" {
 
 # juju_offer.microceph_offer will be created
 resource "juju_offer" "microceph_offer" {
-  name             = "microceph"
   application_name = juju_application.microceph.name
   endpoints        = ["ceph"]
-  model            = data.juju_model.machine_model.name
-}
-
-# juju_offer.microceph_ceph_nfs_offer will be created
-resource "juju_offer" "microceph_ceph_nfs_offer" {
-  name             = "microceph-ceph-nfs"
-  application_name = juju_application.microceph.name
-  endpoints        = ["ceph-nfs"]
   model            = data.juju_model.machine_model.name
 }
 
