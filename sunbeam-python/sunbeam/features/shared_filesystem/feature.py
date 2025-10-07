@@ -240,6 +240,7 @@ class SharedFilesystemFeature(OpenStackControlPlaneFeature):
         ]
 
         run_plan(ceph_nfs_plan, console, show_hints)
+        run_plan(plan, console, show_hints)
         run_plan(manila_data_plan, console, show_hints)
 
         click.echo("Shared Filesystems enabled.")
