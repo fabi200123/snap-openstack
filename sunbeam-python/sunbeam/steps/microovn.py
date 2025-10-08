@@ -95,7 +95,8 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
             node.get("machineid") for node in nodes if node.get("machineid") != -1
         }
         if machine_ids:
-            extra_tfvars["machine_ids"] = list(machine_ids)
+            extra_tfvars["microovn_machine_ids"] = list(machine_ids)
+            extra_tfvars["token_distributor_machine_ids"] = list(machine_ids)
         return extra_tfvars
 
 
@@ -188,10 +189,10 @@ class RemoveMicroOVNUnitsStep(BaseStep, JujuStepHelper):
         except ConfigItemNotFoundException:
             tfvars = {}
 
-        machine_ids = tfvars.get("machine_ids", [])
+        machine_ids = tfvars.get("microovn_machine_ids", [])
         if self.machine_id in machine_ids:
             machine_ids.remove(self.machine_id)
-            tfvars.update({"machine_ids": machine_ids})
+            tfvars.update({"microovn_machine_ids": machine_ids})
             update_config(self.client, CONFIG_KEY, tfvars)
 
     def run(self, status: Status | None = None) -> Result:
@@ -295,6 +296,7 @@ class EnableMicroOVNStep(BaseStep, JujuStepHelper):
         """Enable MicroOVN service on node."""
         if not self.unit:
             return Result(ResultType.FAILED, "Unit not found on machine")
+
         try:
             self.jhelper.run_action(self.unit, self.model, "enable")
         except ActionFailedException as e:

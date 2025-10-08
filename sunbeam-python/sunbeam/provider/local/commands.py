@@ -23,6 +23,7 @@ from sunbeam.commands.configure import (
     TerraformDemoInitStep,
     UserOpenRCStep,
     UserQuestions,
+    get_external_network_configs,
     retrieve_admin_credentials,
 )
 from sunbeam.commands.dashboard_url import retrieve_dashboard_url
@@ -1769,6 +1770,11 @@ def configure_cmd(
         )
 
     if "network" in node["role"]:
+        # Get external network configuration from user answers
+        ext_net_config = get_external_network_configs(client)
+        bridge_name = ext_net_config.get("external-bridge", "br-ex")
+        physnet_name = ext_net_config.get("physnet-name", "physnet1")
+
         plan.append(
             LocalConfigureOpenStackNetworkAgentsStep(
                 client,

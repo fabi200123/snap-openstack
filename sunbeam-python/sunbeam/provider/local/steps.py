@@ -39,6 +39,7 @@ from sunbeam.steps.openstack import EndpointsConfigurationStep
 
 LOG = logging.getLogger(__name__)
 console = Console()
+MICROOVN_APPLICATION = "microovn"
 
 
 def local_hypervisor_questions():
@@ -807,9 +808,11 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
             unit_name = None
 
             try:
-                principal = self.jhelper.get_leader_unit("microovn", self.model)
+                principal = self.jhelper.get_leader_unit(
+                    MICROOVN_APPLICATION, self.model
+                )
             except Exception:
-                app = self.jhelper.get_application("microovn", self.model)
+                app = self.jhelper.get_application(MICROOVN_APPLICATION, self.model)
                 principal = None
                 units_attr = getattr(app, "units", None)
                 if units_attr:

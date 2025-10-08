@@ -26,8 +26,8 @@ resource "juju_application" "microcluster-token-distributor" {
   name  = "microcluster-token-distributor"
   trust = true
   model = var.machine_model
-  machines = length(var.machine_ids) == 0 ? null : toset(var.machine_ids)
-  units    = length(var.machine_ids) == 0 ? 1    : null
+  machines = length(var.token_distributor_machine_ids) == 0 ? null : toset(var.token_distributor_machine_ids)
+  units    = length(var.token_distributor_machine_ids) == 0 ? 1    : null
 
   charm {
     name    = "microcluster-token-distributor"
@@ -40,8 +40,8 @@ resource "juju_application" "microovn" {
   name  = "microovn"
   trust = true
   model = var.machine_model
-  machines = length(var.machine_ids) == 0 ? null : toset(var.machine_ids)
-  units    = length(var.machine_ids) == 0 ? 1    : null
+  machines = length(var.microovn_machine_ids) == 0 ? null : toset(var.microovn_machine_ids)
+  units    = length(var.microovn_machine_ids) == 0 ? 1    : null
 
   charm {
     name    = "microovn"
