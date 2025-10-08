@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 from sunbeam.clusterd.service import NodeNotExistInClusterException
 from sunbeam.core.common import ResultType
-from sunbeam.core.juju import ActionFailedException, ApplicationNotFoundException
+from sunbeam.core.juju import ApplicationNotFoundException
 from sunbeam.steps.microovn import (
     DeployMicroOVNApplicationStep,
     EnableMicroOVNStep,

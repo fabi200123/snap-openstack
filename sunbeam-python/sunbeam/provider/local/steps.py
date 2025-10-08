@@ -808,7 +808,9 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
             unit_name = None
 
             try:
-                principal = self.jhelper.get_leader_unit(MICROOVN_APPLICATION, self.model)
+                principal = self.jhelper.get_leader_unit(
+                    MICROOVN_APPLICATION, self.model
+                )
             except Exception:
                 app = self.jhelper.get_application(MICROOVN_APPLICATION, self.model)
                 principal = None
