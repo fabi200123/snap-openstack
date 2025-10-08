@@ -261,7 +261,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         logger.error("Usage: tag-syncer.py <snap-recipes...>")
         logger.error(
-            "Example: tag-syncer.py ~openstack-snappers/snap-openstack/+snap/openstack-caracal-candidate ~openstack-snappers/+snap/openstack-caracal-edge"
+            "Example: tag-syncer.py ~openstack-snappers/snap-openstack/+snap/openstack-caracal-candidate ~openstack-snappers/+snap/openstack-main-edge"
         )
         sys.exit(1)
 
