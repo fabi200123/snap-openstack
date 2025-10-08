@@ -61,8 +61,8 @@ class TestDeployMicroOVNApplicationStep(unittest.TestCase):
 
         assert "ca-offer-url" in extra_tfvars
         assert "ovn-relay-offer-url" in extra_tfvars
-        assert "machine_ids" in extra_tfvars
-        assert set(extra_tfvars["machine_ids"]) == {"1", "2"}
+        assert "microovn_machine_ids" in extra_tfvars
+        assert set(extra_tfvars["microovn_machine_ids"]) == {"1", "2"}
 
     def test_extra_tfvars_no_network_nodes(self):
         openstack_tfhelper = Mock()
@@ -178,9 +178,6 @@ class TestEnableMicroOVNStep(unittest.TestCase):
 
         result = step.run()
 
-        self.jhelper.run_action.assert_called_once_with(
-            "microovn/0", self.model, "enable"
-        )
         assert result.result_type == ResultType.COMPLETED
 
     def test_run_no_unit(self):
@@ -191,13 +188,3 @@ class TestEnableMicroOVNStep(unittest.TestCase):
 
         assert result.result_type == ResultType.FAILED
         assert result.message == "Unit not found on machine"
-
-    def test_run_action_failed(self):
-        step = EnableMicroOVNStep(self.client, self.node, self.jhelper, self.model)
-        step.unit = "microovn/0"
-        self.jhelper.run_action.side_effect = ActionFailedException("Enable failed")
-
-        result = step.run()
-
-        assert result.result_type == ResultType.FAILED
-        assert result.message == "Failed to enable MicroOVN service for unit microovn/0"

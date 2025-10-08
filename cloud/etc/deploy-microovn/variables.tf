@@ -30,7 +30,13 @@ variable "charm_microovn_config" {
   default     = {}
 }
 
-variable "machine_ids" {
+variable "microovn_machine_ids" {
+  description = "List of machine ids to include"
+  type        = list(string)
+  default     = []
+}
+
+variable "token_distributor_machine_ids" {
   description = "List of machine ids to include"
   type        = list(string)
   default     = []
