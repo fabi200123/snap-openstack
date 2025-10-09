@@ -1718,35 +1718,32 @@ def configure_cmd(
         tfhelper.env = (tfhelper.env or {}) | admin_credentials
         answer_file = tfhelper.path / "config.auto.tfvars.json"
         tfhelper_hypervisor = deployment.get_tfhelper("hypervisor-plan")
-        try:
-            machine_id = str(node.get("machineid"))
-            jhelper.get_unit_from_machine(
-                "openstack-hypervisor", machine_id, deployment.openstack_machines_model
+        machine_id = str(node.get("machineid"))
+        jhelper.get_unit_from_machine(
+            "openstack-hypervisor", machine_id, deployment.openstack_machines_model
+        )
+        plan.append(
+            LocalSetHypervisorUnitsOptionsStep(
+                client,
+                name,
+                jhelper,
+                deployment.openstack_machines_model,
+                # Accept preseed file but do not allow 'accept_defaults' as nic
+                # selection may vary from machine to machine and is potentially
+                # destructive if it takes over an unintended nic.
+                manifest=manifest,
             )
-            plan.append(
-                LocalSetHypervisorUnitsOptionsStep(
-                    client,
-                    name,
-                    jhelper,
-                    deployment.openstack_machines_model,
-                    # Accept preseed file but do not allow 'accept_defaults' as nic
-                    # selection may vary from machine to machine and is potentially
-                    # destructive if it takes over an unintended nic.
-                    manifest=manifest,
-                )
+        )
+        plan.append(TerraformInitStep(tfhelper_hypervisor))
+        plan.append(
+            ReapplyHypervisorTerraformPlanStep(
+                client,
+                tfhelper_hypervisor,
+                jhelper,
+                manifest,
+                model=deployment.openstack_machines_model,
             )
-            plan.append(TerraformInitStep(tfhelper_hypervisor))
-            plan.append(
-                ReapplyHypervisorTerraformPlanStep(
-                    client,
-                    tfhelper_hypervisor,
-                    jhelper,
-                    manifest,
-                    model=deployment.openstack_machines_model,
-                )
-            )
-        except Exception:
-            LOG.info("No openstack-hypervisor unit on this machine; skipping.")
+        )
 
         plan.extend(
             [
