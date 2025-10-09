@@ -8,6 +8,7 @@ import logging
 from functools import cache
 from typing import Any
 
+import click
 from rich.console import Console
 from rich.status import Status
 
@@ -28,7 +29,7 @@ from sunbeam.core.common import (
     SunbeamException,
     parse_ip_range_or_cidr,
 )
-from sunbeam.core.juju import ActionFailedException, JujuHelper
+from sunbeam.core.juju import ActionFailedException, JujuHelper, UnitNotFoundException
 from sunbeam.core.manifest import Manifest
 from sunbeam.provider.common import nic_utils
 from sunbeam.steps import hypervisor
@@ -302,7 +303,7 @@ class LocalConfigSRIOVStep(BaseStep):
         self.should_skip = False
         self.clear_previous_config = clear_previous_config
 
-    def prompt(
+    def prompt(  # noqa: C901
         self,
         console: Console | None = None,
         show_hint: bool = False,
@@ -364,6 +365,33 @@ class LocalConfigSRIOVStep(BaseStep):
         if not self.accept_defaults:
             self._do_prompt(pci_whitelist, excluded_devices, show_hint)
 
+        LOG.info("Updated PCI device whitelist: %s", pci_whitelist)
+        LOG.info("Updated PCI device exclusion list: %s", excluded_devices)
+
+        # Handle PCI passthrough devices
+        # All GPU devices returned by openstack-hypervisor will be added
+        # as PCI passthrough devices to pci_whitelist.
+        try:
+            snap_gpus = nic_utils.fetch_gpus(
+                self.client, self.node_name, self.jhelper, self.model
+            )
+        except (UnitNotFoundException, ActionFailedException) as e:
+            LOG.debug(
+                f"Failed fetching GPUs from node {self.node_name}",
+                exc_info=True,
+            )
+            raise click.ClickException(
+                f"Failed in fetching GPUs from node {self.node_name}"
+            ) from e
+
+        for snap_gpu in snap_gpus["gpus"]:
+            nic_utils.whitelist_pci_passthrough_device(
+                self.node_name, snap_gpu, pci_whitelist, excluded_devices
+            )
+
+        LOG.info(
+            "PCI device whitelist information after handling PCI passthrough devices:"
+        )
         LOG.info("Updated PCI device whitelist: %s", pci_whitelist)
         LOG.info("Updated PCI device exclusion list: %s", excluded_devices)
 
