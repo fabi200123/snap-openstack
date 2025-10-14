@@ -1717,6 +1717,27 @@ def configure_cmd(
     tfhelper.env = (tfhelper.env or {}) | admin_credentials
     answer_file = tfhelper.path / "config.auto.tfvars.json"
 
+    plan.extend(
+        [
+            UserQuestions(
+                client,
+                answer_file=answer_file,
+                manifest=manifest,
+                accept_defaults=accept_defaults,
+            ),
+            TerraformDemoInitStep(client, tfhelper),
+            DemoSetup(client=client, tfhelper=tfhelper, answer_file=answer_file),
+            UserOpenRCStep(
+                client=client,
+                tfhelper=tfhelper,
+                auth_url=admin_credentials["OS_AUTH_URL"],
+                auth_version=admin_credentials["OS_AUTH_VERSION"],
+                cacert=admin_credentials.get("OS_CACERT"),
+                openrc=openrc,
+            ),
+        ]
+    )
+
     if "compute" in node["role"]:
         tfhelper_hypervisor = deployment.get_tfhelper("hypervisor-plan")
         machine_id = str(node.get("machineid"))
@@ -1765,27 +1786,6 @@ def configure_cmd(
                 enable_chassis_as_gw=True,
             )
         )
-
-    plan.extend(
-        [
-            UserQuestions(
-                client,
-                answer_file=answer_file,
-                manifest=manifest,
-                accept_defaults=accept_defaults,
-            ),
-            TerraformDemoInitStep(client, tfhelper),
-            DemoSetup(client=client, tfhelper=tfhelper, answer_file=answer_file),
-            UserOpenRCStep(
-                client=client,
-                tfhelper=tfhelper,
-                auth_url=admin_credentials["OS_AUTH_URL"],
-                auth_version=admin_credentials["OS_AUTH_VERSION"],
-                cacert=admin_credentials.get("OS_CACERT"),
-                openrc=openrc,
-            ),
-        ]
-    )
 
     run_plan(plan, console, show_hints)
     dashboard_url = retrieve_dashboard_url(jhelper)
