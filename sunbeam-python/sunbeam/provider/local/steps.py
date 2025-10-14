@@ -46,6 +46,7 @@ from sunbeam.steps.openstack import EndpointsConfigurationStep
 LOG = logging.getLogger(__name__)
 console = Console()
 MICROOVN_APPLICATION = "microovn"
+OPENSTACK_NETWORK_AGENTS_APP = "openstack-network-agents"
 
 
 def local_hypervisor_questions():
@@ -823,7 +824,7 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
     def is_skip(self, status: Status | None = None) -> Result:
         """Check if openstack-network-agents is deployed."""
         try:
-            self.jhelper.get_application("openstack-network-agents", self.model)
+            self.jhelper.get_application(OPENSTACK_NETWORK_AGENTS_APP, self.model)
         except Exception:
             return Result(ResultType.SKIPPED, "openstack-network-agents not deployed")
         return Result(ResultType.COMPLETED)
@@ -832,13 +833,11 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
         """Run action to configure openstack-network-agents local settings."""
         try:
             self.jhelper.wait_application_ready(
-                "openstack-network-agents",
+                OPENSTACK_NETWORK_AGENTS_APP,
                 self.model,
                 accepted_status=["active", "blocked", "waiting"],
                 timeout=600,
             )
-
-            unit_name = None
 
             try:
                 principal = self.jhelper.get_leader_unit(
@@ -859,8 +858,24 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
                     ResultType.FAILED, "Could not determine principal microovn unit"
                 )
 
-            ordinal = principal.split("/", 1)[1]
-            unit_name = f"openstack-network-agents/{ordinal}"
+            try:
+                unit_name = self.find_subordinate_unit_for(
+                    principal, OPENSTACK_NETWORK_AGENTS_APP, self.model
+                )
+            except Exception as e:
+                LOG.debug(
+                    "Failed to find subordinate unit for %s on principal %s: %s",
+                    OPENSTACK_NETWORK_AGENTS_APP,
+                    principal,
+                    e,
+                    exc_info=True,
+                )
+                return Result(
+                    ResultType.FAILED,
+                    f"Could not find {OPENSTACK_NETWORK_AGENTS_APP} unit for principal {
+                        principal
+                    }",
+                )
 
             LOG.debug(
                 "Running set-network-agents-local-settings on %s"
@@ -910,7 +925,9 @@ def network_node_questions():
     }
 
 
-class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
+class LocalConfigureOpenStackNetworkAgentsStep(
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep
+):
     """Prompt for external interface (or use manifest) and configure agents."""
 
     def __init__(
@@ -926,19 +943,17 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
         enable_chassis_as_gw: bool = True,
     ):
         super().__init__(
-            "Configure OpenStack network agents (local)",
-            "Configuring openstack-network-agents local settings",
+            jhelper=jhelper,
+            external_interface="",
+            bridge_name=bridge_name,
+            physnet_name=physnet_name,
+            model=model,
+            enable_chassis_as_gw=enable_chassis_as_gw,
         )
         self.client = client
         self.node_name = node_name
-        self.jhelper = jhelper
-        self.model = model
         self.manifest = manifest
         self.accept_defaults = accept_defaults
-        self.external_interface: str | None = None
-        self.bridge_name = bridge_name
-        self.physnet_name = physnet_name
-        self.enable_chassis_as_gw = enable_chassis_as_gw
 
     def has_prompts(self) -> bool:
         """Returns true if the step has prompts that it can ask the user."""
@@ -995,12 +1010,4 @@ class LocalConfigureOpenStackNetworkAgentsStep(BaseStep):
         if not self.external_interface:
             return Result(ResultType.FAILED, "No external interface selected")
 
-        step = ConfigureOpenStackNetworkAgentsLocalSettingsStep(
-            jhelper=self.jhelper,
-            external_interface=self.external_interface,
-            bridge_name=self.bridge_name,
-            physnet_name=self.physnet_name,
-            model=self.model,
-            enable_chassis_as_gw=self.enable_chassis_as_gw,
-        )
-        return step.run(status)
+        return super().run(status)

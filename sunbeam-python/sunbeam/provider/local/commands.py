@@ -1709,14 +1709,15 @@ def configure_cmd(
     ]
     node = client.cluster.get_node_info(name)
 
+    admin_credentials = retrieve_admin_credentials(jhelper, OPENSTACK_MODEL)
+    # Add OS_INSECURE as https not working with terraform openstack provider.
+    admin_credentials["OS_INSECURE"] = "true"
+    tfplan = "demo-setup"
+    tfhelper = deployment.get_tfhelper(tfplan)
+    tfhelper.env = (tfhelper.env or {}) | admin_credentials
+    answer_file = tfhelper.path / "config.auto.tfvars.json"
+
     if "compute" in node["role"]:
-        admin_credentials = retrieve_admin_credentials(jhelper, OPENSTACK_MODEL)
-        # Add OS_INSECURE as https not working with terraform openstack provider.
-        admin_credentials["OS_INSECURE"] = "true"
-        tfplan = "demo-setup"
-        tfhelper = deployment.get_tfhelper(tfplan)
-        tfhelper.env = (tfhelper.env or {}) | admin_credentials
-        answer_file = tfhelper.path / "config.auto.tfvars.json"
         tfhelper_hypervisor = deployment.get_tfhelper("hypervisor-plan")
         machine_id = str(node.get("machineid"))
         jhelper.get_unit_from_machine(
@@ -1745,27 +1746,6 @@ def configure_cmd(
             )
         )
 
-        plan.extend(
-            [
-                UserQuestions(
-                    client,
-                    answer_file=answer_file,
-                    manifest=manifest,
-                    accept_defaults=accept_defaults,
-                ),
-                TerraformDemoInitStep(client, tfhelper),
-                DemoSetup(client=client, tfhelper=tfhelper, answer_file=answer_file),
-                UserOpenRCStep(
-                    client=client,
-                    tfhelper=tfhelper,
-                    auth_url=admin_credentials["OS_AUTH_URL"],
-                    auth_version=admin_credentials["OS_AUTH_VERSION"],
-                    cacert=admin_credentials.get("OS_CACERT"),
-                    openrc=openrc,
-                ),
-            ]
-        )
-
     if "network" in node["role"]:
         # Get external network configuration from user answers
         ext_net_config = get_external_network_configs(client)
@@ -1785,6 +1765,28 @@ def configure_cmd(
                 enable_chassis_as_gw=True,
             )
         )
+
+    plan.extend(
+        [
+            UserQuestions(
+                client,
+                answer_file=answer_file,
+                manifest=manifest,
+                accept_defaults=accept_defaults,
+            ),
+            TerraformDemoInitStep(client, tfhelper),
+            DemoSetup(client=client, tfhelper=tfhelper, answer_file=answer_file),
+            UserOpenRCStep(
+                client=client,
+                tfhelper=tfhelper,
+                auth_url=admin_credentials["OS_AUTH_URL"],
+                auth_version=admin_credentials["OS_AUTH_VERSION"],
+                cacert=admin_credentials.get("OS_CACERT"),
+                openrc=openrc,
+            ),
+        ]
+    )
+
     run_plan(plan, console, show_hints)
     dashboard_url = retrieve_dashboard_url(jhelper)
     console.print("The cloud has been configured for sample usage.")
