@@ -21,6 +21,71 @@ def fetch_nics(client: Client, node_name: str, jhelper: JujuHelper, model: str):
     return json.loads(action_result.get("result", "{}"))
 
 
+def fetch_host_nics(
+    client: Client,
+    node_name: str,
+    jhelper: JujuHelper,
+    model: str,
+    prefer_apps: tuple[str, ...] = ("microovn", "openstack-network-agents"),
+) -> dict:
+    """Fetch NICs directly from the host using a unit on the same machine.
+
+    - Does not require openstack-hypervisor to be present.
+    - Uses a principal (or subordinate) unit colocated on the target machine
+      to run a small script that inspects /sys/class/net and ip -j addr.
+
+    Returns a dict {"nics": [...], "candidates": [...]} like fetch_nics.
+    """
+    LOG.debug("Fetching host nics (hypervisor-independent) ...")
+    node = client.cluster.get_node_info(node_name)
+    machine_id = str(node.get("machineid"))
+
+    principal_unit = None
+    for app in prefer_apps:
+        try:
+            principal_unit = jhelper.get_unit_from_machine(app, machine_id, model)
+            break
+        except Exception:
+            continue
+
+    if principal_unit is None:
+        LOG.debug("No suitable unit found on machine to inspect host NICs", exc_info=True)
+        return {"nics": [], "candidates": []}
+
+    cmd = (
+        "python3 -c 'import json,os,subprocess as sp;"
+        "ifs=[i for i in os.listdir(\"/sys/class/net\") if i!=\"lo\"];"
+        "def _op(n):\n"
+        "    p=f\"/sys/class/net/{n}/operstate\";\n"
+        "    return open(p).read().strip().lower() if os.path.exists(p) else \"unknown\";\n"
+        "def _car(n):\n"
+        "    p=f\"/sys/class/net/{n}/carrier\";\n"
+        "    return open(p).read().strip()==\"1\" if os.path.exists(p) else None;\n"
+        "def _cfg(n):\n"
+        "    try:\n"
+        "        data=json.loads(sp.check_output([\"ip\",\"-j\",\"addr\",\"show\",n]).decode())[0];\n"
+        "        ai=data.get(\"addr_info\",[]);\n"
+        "        return any(a.get(\"scope\") in (\"global\",\"site\") for a in ai);\n"
+        "    except Exception:\n"
+        "        return False;\n"
+        "res=[];\n"
+        "for i in ifs:\n"
+        "    s=_op(i); c=_car(i); conf=_cfg(i);\n"
+        "    res.append({\"name\":i,\"up\":s==\"up\",\"connected\":(c if c is not None else (s==\"up\")),\"configured\":conf});\n"
+        "cands=[r[\"name\"] for r in res if not r[\"configured\"]];\n"
+        "print(json.dumps({\"nics\":res,\"candidates\":cands}))'"
+    )
+
+    try:
+        task = jhelper.run_cmd_on_machine_unit_payload(principal_unit, model, cmd, timeout=180)
+        results = getattr(task, "results", {}) or {}
+        stdout = results.get("stdout") or results.get("result") or ""
+        return json.loads(stdout) if stdout else {"nics": [], "candidates": []}
+    except Exception:
+        LOG.debug("Failed host NIC inspection command (fetch_host_nics)", exc_info=True)
+        return {"nics": [], "candidates": []}
+
+
 def fetch_gpus(client: Client, node_name: str, jhelper: JujuHelper, model: str):
     LOG.debug("Fetching gpus...")
     node = client.cluster.get_node_info(node_name)

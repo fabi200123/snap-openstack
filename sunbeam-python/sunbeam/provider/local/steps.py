@@ -980,6 +980,17 @@ class LocalConfigureOpenStackNetworkAgentsStep(
             accept_defaults=self.accept_defaults,
         )
 
+        try:
+            nics = nic_utils.fetch_host_nics(
+                self.client, self.node_name, self.jhelper, self.model
+            )
+            all_nics = nics.get("nics", []) or []
+            candidates = nics.get("candidates", []) or []
+        except Exception:
+            LOG.debug("Failed to fetch NICs for choices; falling back to free text", exc_info=True)
+
+        if not candidates and all_nics:
+            candidates = [i.get("name") for i in all_nics if i.get("name")]
         if not candidates:
             return qbank.external_interface.ask()
 
