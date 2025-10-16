@@ -18,7 +18,6 @@ from sunbeam.core.common import BaseStep, Result, ResultType, Status, validate_i
 from sunbeam.core.juju import (
     ActionFailedException,
     JujuHelper,
-    JujuStepHelper,
     LeaderNotFoundException,
 )
 from sunbeam.core.manifest import Manifest
@@ -687,7 +686,7 @@ class SetHypervisorUnitsOptionsStep(BaseStep):
         return Result(ResultType.COMPLETED)
 
 
-class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper):
+class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep):
     """Configure openstack-network-agents local settings via charm config.
 
     This is intended to run after microovn optional integrations are applied,
@@ -708,7 +707,6 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
             "Configure OpenStack network agents",
             "Setting openstack-network-agents local settings",
         )
-        JujuStepHelper.__init__(self, jhelper, model)
         self.client = client
         if isinstance(names, str):
             names = [names]
