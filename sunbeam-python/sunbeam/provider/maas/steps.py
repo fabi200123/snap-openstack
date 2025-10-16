@@ -32,9 +32,10 @@ from sunbeam.clusterd.service import NodeNotExistInClusterException
 from sunbeam.commands.configure import (
     CLOUD_CONFIG_SECTION,
     PCI_CONFIG_SECTION,
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep,
+    get_external_network_configs,
     VARIABLE_DEFAULTS,
     BaseConfigDPDKStep,
-    ConfigureOpenStackNetworkAgentsLocalSettingsStep,
     SetHypervisorUnitsOptionsStep,
     ext_net_questions,
 )
@@ -1941,18 +1942,88 @@ class MaasConfigureOpenStackNetworkAgentsStep(ConfigureOpenStackNetworkAgentsLoc
         self,
         client: Client,
         maas_client: maas_client.MaasClient,
+        names: list[str],
         jhelper: JujuHelper,
         model: str,
-        names: list[str],
+        manifest: Manifest | None = None,
     ):
+        # Defaults; will be overridden from answers below
         super().__init__(
-            "Configure openstack-network-agents",
-            "Configuring openstack-network-agents",
+            client=client,
+            names=names,
+            jhelper=jhelper,
+            bridge_name="br-ex",
+            physnet_name="physnet1",
+            model=model,
+            enable_chassis_as_gw=True,
         )
         JujuStepHelper.__init__(self, jhelper, model)
         self.client = client
         self.maas_client = maas_client
         self.names = names
+        self.manifest = manifest
+        # Align with local mode: fetch bridge/physnet from stored answers
+        try:
+            ext_net_config = get_external_network_configs(client)
+            self.bridge_name = ext_net_config.get("external-bridge", "br-ex")
+            self.physnet_name = ext_net_config.get("physnet-name", "physnet1")
+        except Exception:
+            LOG.debug("Falling back to default bridge/physnet", exc_info=True)
+
+    def _get_maas_external_nics(self) -> dict[str, str | None]:
+        """Retrieve first nic from MAAS per machine with network tag.
+
+        Returns { "<hostname>": "<nic-name>" | None }
+        """
+        machines = maas_client.list_machines(self.maas_client, hostname=self.names)
+        nics: dict[str, str | None] = {}
+        for machine in machines:
+            machine_nics = [
+                nic["name"]
+                for nic in machine["nics"]
+                if maas_deployment.NicTags.NETWORK.value in nic["tags"]
+            ]
+            nics[machine["hostname"]] = machine_nics[0] if machine_nics else None
+        return nics
+
+    def has_prompts(self) -> bool:
+        return False
+
+    def _populate_external_interfaces_from_manifest(self) -> None:
+        if not self.manifest or not self.manifest.core or not self.manifest.core.config:
+            return
+        ext = self.manifest.core.config.external_network
+        if not ext:
+            return
+        hostmap = getattr(ext, "nics", None) or {}
+        for name in self.names:
+            nic = hostmap.get(name)
+            if nic:
+                self.external_interfaces[name] = nic
+        nic = getattr(ext, "nic", None)
+        if nic:
+            for name in self.names:
+                self.external_interfaces.setdefault(name, nic)
+
+    def is_skip(self, status: Status | None = None) -> Result:
+        result = super().is_skip(status)
+        if result.result_type != ResultType.COMPLETED:
+            return result
+        # Populate mapping from MAAS tag (preferred), then manifest as fallback
+        nics = self._get_maas_external_nics()
+        for host, nic in nics.items():
+            if nic:
+                self.external_interfaces[host] = nic
+        # Fallback to manifest if any host still missing
+        if any(host not in self.external_interfaces for host in self.names):
+            self._populate_external_interfaces_from_manifest()
+        missing = [n for n in self.names if not self.external_interfaces.get(n)]
+        if missing:
+            return Result(
+                ResultType.FAILED,
+                "Missing external interface mapping for: " + ", ".join(missing),
+            )
+        return Result(ResultType.COMPLETED)
 
 
 

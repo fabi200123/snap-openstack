@@ -98,6 +98,7 @@ from sunbeam.provider.maas.steps import (
     MaasSaveClusterdCredentialsStep,
     MaasSaveControllerStep,
     MaasScaleJujuStep,
+    MaasConfigureOpenStackNetworkAgentsStep,
     MaasSetHypervisorUnitsOptionsStep,
     MaasUserQuestions,
     MachineComputeNicCheck,
@@ -902,6 +903,9 @@ def configure_cmd(
     compute = list(
         map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.COMPUTE.value))
     )
+    network = list(
+        map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.NETWORK.value))
+    )
     plan = [
         AddManifestStep(client, manifest_path),
         JujuLoginStep(deployment.juju_account),
@@ -937,6 +941,14 @@ def configure_cmd(
             client,
             maas_client,
             compute,
+            jhelper,
+            deployment.openstack_machines_model,
+            manifest,
+        ),
+        MaasConfigureOpenStackNetworkAgentsStep(
+            client,
+            maas_client,
+            network,
             jhelper,
             deployment.openstack_machines_model,
             manifest,
