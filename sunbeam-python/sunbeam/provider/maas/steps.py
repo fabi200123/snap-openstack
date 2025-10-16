@@ -34,6 +34,7 @@ from sunbeam.commands.configure import (
     PCI_CONFIG_SECTION,
     VARIABLE_DEFAULTS,
     BaseConfigDPDKStep,
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep,
     SetHypervisorUnitsOptionsStep,
     ext_net_questions,
 )
@@ -1932,6 +1933,74 @@ class MaasSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
         self.nics = nics
         return Result(ResultType.COMPLETED)
 
+
+class MaasConfigureOpenstackNetworkAgentsStep(
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep):
+    """Configure OpenStack network agents settings on the machine."""
+    def __init__(
+        self,
+        client: Client,
+        maas_client: maas_client.MaasClient,
+        names: list[str],
+        jhelper: JujuHelper,
+        model: str,
+        manifest: Manifest | None = None,
+    ):
+        super().__init__(
+            client,
+            names,
+            jhelper,
+            model,
+            manifest,
+            "Configure OpenStack network agents",
+            "Configuring OpenStack network agents",
+        )
+        self.maas_client = maas_client
+
+    def _get_maas_nics(self) -> dict[str, str | None]:
+        """Retrieve fist nic from MAAS per machine with network tag.
+
+        Return a dict of format:
+            {
+                "<machine>": "<nic1_name>" | None
+            }
+        """
+        machines = maas_client.list_machines(self.maas_client, hostname=self.names)
+        nics = {}
+        for machine in machines:
+            machine_nics = [
+                nic["name"]
+                for nic in machine["nics"]
+                if maas_deployment.NicTags.COMPUTE.value in nic["tags"]
+            ]
+
+            if len(machine_nics) > 0:
+                # take first nic with "neutron:physnet1" tag
+                nic = machine_nics[0]
+            else:
+                nic = None
+            nics[machine["hostname"]] = nic
+
+        return nics
+
+    def is_skip(self, status: Status | None = None):
+        """Determines if the step should be skipped or not."""
+        result = super().is_skip(status)
+        if result.result_type == ResultType.FAILED:
+            return result
+        nics = self._get_maas_nics()
+        LOG.debug("Nics: %r", nics)
+
+        for machine, nic in nics.items():
+            if nic is None:
+                nic_tag = maas_deployment.NicTags.COMPUTE.value
+                return Result(
+                    ResultType.FAILED,
+                    f"Machine {machine} does not have any {nic_tag} nic defined.",
+                )
+
+        self.nics = nics
+        return Result(ResultType.COMPLETED)
 
 class MaasUserQuestions(BaseStep):
     """Ask user configuration questions."""
