@@ -34,6 +34,7 @@ from sunbeam.commands.configure import (
     PCI_CONFIG_SECTION,
     VARIABLE_DEFAULTS,
     BaseConfigDPDKStep,
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep,
     SetHypervisorUnitsOptionsStep,
     ext_net_questions,
 )
@@ -1931,6 +1932,29 @@ class MaasSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
 
         self.nics = nics
         return Result(ResultType.COMPLETED)
+
+
+class MaasConfigureOpenStackNetworkAgentsStep(ConfigureOpenStackNetworkAgentsLocalSettingsStep):
+    """Configure openstack-network-agents local settings on MAAS nodes."""
+
+    def __init__(
+        self,
+        client: Client,
+        maas_client: maas_client.MaasClient,
+        jhelper: JujuHelper,
+        model: str,
+        names: list[str],
+    ):
+        super().__init__(
+            "Configure openstack-network-agents",
+            "Configuring openstack-network-agents",
+        )
+        JujuStepHelper.__init__(self, jhelper, model)
+        self.client = client
+        self.maas_client = maas_client
+        self.names = names
+
+
 
 
 class MaasUserQuestions(BaseStep):
