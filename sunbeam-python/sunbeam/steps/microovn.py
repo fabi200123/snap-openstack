@@ -16,7 +16,7 @@ from sunbeam.core.common import (
     ResultType,
     Role,
 )
-from sunbeam.core.deployment import Deployment
+from sunbeam.core.deployment import Deployment, Networks
 from sunbeam.core.juju import (
     ApplicationNotFoundException,
     JujuHelper,
@@ -90,6 +90,26 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
         if machine_ids:
             extra_tfvars["microovn_machine_ids"] = list(machine_ids)
             extra_tfvars["token_distributor_machine_ids"] = list(machine_ids)
+
+        extra_tfvars.update(
+            {
+                "endpoint_bindings": [
+                    {"space": self.deployment.get_space(Networks.MANAGEMENT)},
+                    {
+                        "endpoint": "cluster",
+                        "space": self.deployment.get_space(Networks.MANAGEMENT),
+                    },
+                    {
+                        "endpoint": "certificates",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                    {
+                        "endpoint": "ovsdb-external",
+                        "space": self.deployment.get_space(Networks.INTERNAL),
+                    },
+                ]
+            }
+        )
         return extra_tfvars
 
 

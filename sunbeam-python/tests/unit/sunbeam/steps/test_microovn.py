@@ -84,11 +84,12 @@ class TestDeployMicroOVNApplicationStep(unittest.TestCase):
         )
         extra_tfvars = step.extra_tfvars()
 
-        expected_tfvars = {
-            "ca-offer-url": "provider:admin/default.ca",
-            "ovn-relay-offer-url": "provider:admin/default.ovn-relay",
-        }
-        assert extra_tfvars == expected_tfvars
+        # Now includes endpoint_bindings as part of network node support
+        assert "ca-offer-url" in extra_tfvars
+        assert "ovn-relay-offer-url" in extra_tfvars
+        assert "endpoint_bindings" in extra_tfvars
+        assert extra_tfvars["ca-offer-url"] == "provider:admin/default.ca"
+        assert extra_tfvars["ovn-relay-offer-url"] == "provider:admin/default.ovn-relay"
 
 
 class TestReapplyMicroOVNOptionalIntegrationsStep(unittest.TestCase):

@@ -20,6 +20,7 @@ from sunbeam.commands.configure import (
     CLOUD_CONFIG_SECTION,
     PCI_CONFIG_SECTION,
     BaseConfigDPDKStep,
+    ConfigureOpenStackNetworkAgentsLocalSettingsStep,
     SetHypervisorUnitsOptionsStep,
 )
 from sunbeam.core.common import (
@@ -32,7 +33,6 @@ from sunbeam.core.common import (
 from sunbeam.core.juju import (
     ActionFailedException,
     JujuHelper,
-    JujuStepHelper,
     UnitNotFoundException,
 )
 from sunbeam.core.manifest import Manifest
@@ -45,8 +45,6 @@ from sunbeam.steps.openstack import EndpointsConfigurationStep
 
 LOG = logging.getLogger(__name__)
 console = Console()
-MICROOVN_APPLICATION = "microovn"
-OPENSTACK_NETWORK_AGENTS_APP = "openstack-network-agents"
 
 
 def local_hypervisor_questions():
@@ -792,134 +790,6 @@ class LocalConfigDPDKStep(BaseConfigDPDKStep):
             return Result(ResultType.FAILED, msg)
 
         return Result(ResultType.COMPLETED)
-
-
-class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper):
-    """Configure openstack-network-agents local settings via charm config.
-
-    This is intended to run after microovn optional integrations are applied,
-    so juju-info relation to openstack-network-agents exists.
-    """
-
-    def __init__(
-        self,
-        client: Client,
-        names: list[str] | str,
-        jhelper: JujuHelper,
-        bridge_name: str,
-        physnet_name: str,
-        model: str,
-        enable_chassis_as_gw: bool = True,
-    ):
-        super().__init__(
-            "Configure OpenStack network agents",
-            "Setting openstack-network-agents local settings",
-        )
-        self.client = client
-        if isinstance(names, str):
-            names = [names]
-        self.names = names
-        self.jhelper = jhelper
-        self.model = model
-        self.bridge_name = bridge_name
-        self.physnet_name = physnet_name
-        self.enable_chassis_as_gw = enable_chassis_as_gw
-        self.external_interfaces: dict[str, str] = {}
-
-    def is_skip(self, status: Status | None = None) -> Result:
-        """Check if openstack-network-agents is deployed."""
-        try:
-            self.jhelper.get_application(OPENSTACK_NETWORK_AGENTS_APP, self.model)
-        except Exception:
-            return Result(ResultType.SKIPPED, "openstack-network-agents not deployed")
-        return Result(ResultType.COMPLETED)
-
-    def run(self, status: Status | None = None) -> Result:
-        """Run action to configure openstack-network-agents local settings.
-
-        For each node name, identify the principal microovn unit on that
-        machine and run the action on its openstack-network-agents subordinate.
-        """
-        try:
-            self.jhelper.wait_application_ready(
-                OPENSTACK_NETWORK_AGENTS_APP,
-                self.model,
-                accepted_status=["active", "blocked", "waiting"],
-                timeout=600,
-            )
-
-            for name in self.names:
-                self.update_status(
-                    status,
-                    f"setting openstack-network-agents local settings for {name}",
-                )
-
-                external_iface = self.external_interfaces.get(name)
-                if not external_iface:
-                    msg = f"No external interface specified for node {name}"
-                    LOG.debug(msg)
-                    return Result(ResultType.FAILED, msg)
-
-                node = self.client.cluster.get_node_info(name)
-                machine_id = str(node.get("machineid"))
-
-                # Principal unit on this machine
-                principal = self.jhelper.get_unit_from_machine(
-                    MICROOVN_APPLICATION, machine_id, self.model
-                )
-
-                try:
-                    unit_name = self.find_subordinate_unit_for(
-                        principal, OPENSTACK_NETWORK_AGENTS_APP, self.model
-                    )
-                except Exception as e:
-                    LOG.debug(
-                        "Failed to find subordinate unit for %s on principal %s: %s",
-                        OPENSTACK_NETWORK_AGENTS_APP,
-                        principal,
-                        e,
-                        exc_info=True,
-                    )
-                    return Result(
-                        ResultType.FAILED,
-                        f"Could not find {
-                            OPENSTACK_NETWORK_AGENTS_APP
-                        } unit for principal {principal}",
-                    )
-
-                LOG.debug(
-                    "Running set-network-agents-local-settings on %s"
-                    " (bridge=%s, physnet=%s, iface=%s, gw=%s)",
-                    unit_name,
-                    self.bridge_name,
-                    self.physnet_name,
-                    external_iface,
-                    self.enable_chassis_as_gw,
-                )
-
-                self.jhelper.run_action(
-                    unit_name,
-                    self.model,
-                    "set-network-agents-local-settings",
-                    action_params={
-                        "external-interface": external_iface,
-                        "bridge-name": self.bridge_name,
-                        "physnet-name": self.physnet_name,
-                        "enable-chassis-as-gw": self.enable_chassis_as_gw,
-                    },
-                )
-
-            return Result(ResultType.COMPLETED)
-
-        except Exception as e:
-            LOG.debug(
-                "Failed to configure openstack-network-agents via action: %s",
-                e,
-                exc_info=True,
-            )
-            return Result(
-                ResultType.FAILED, "Failed to configure openstack-network-agents"
-            )
 
 
 def network_node_questions():

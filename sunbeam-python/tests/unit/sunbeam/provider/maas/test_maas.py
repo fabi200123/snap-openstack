@@ -275,7 +275,7 @@ class TestMachineComputeNicCheck:
         result = check.run()
         assert result.passed is DiagnosticResultType.SUCCESS
         assert result.details["machine"] == "test_machine"
-        assert result.message == "not a compute node."
+        assert result.message == "not a compute or network node."
 
     def test_run_with_no_compute_nic(self):
         machine = {
@@ -1647,3 +1647,46 @@ class TestMaasConfigDPDKStep:
         step._prompt_nics()
 
         assert expected_nics == step.nics
+
+
+class TestMachineComputeNicCheckNetworkNode:
+    """Test MachineComputeNicCheck validates network nodes correctly."""
+
+    def test_run_with_network_node_and_nic(self):
+        """Network node with neutron:physnet1 tag should pass."""
+        machine = {
+            "hostname": "test_machine",
+            "roles": [RoleTags.NETWORK.value],
+            "nics": [{"name": "eth1", "tags": [NicTags.COMPUTE.value]}],
+        }
+        check = MachineComputeNicCheck(machine)
+        result = check.run()
+        assert result.passed is DiagnosticResultType.SUCCESS
+        assert result.details["machine"] == "test_machine"
+        assert result.message and NicTags.COMPUTE.value in result.message
+
+    def test_run_with_network_node_no_nic(self):
+        """Network node without neutron:physnet1 tag should fail."""
+        machine = {
+            "hostname": "test_machine",
+            "roles": [RoleTags.NETWORK.value],
+            "nics": [{"name": "eth1", "tags": []}],
+        }
+        check = MachineComputeNicCheck(machine)
+        result = check.run()
+        assert result.passed is DiagnosticResultType.FAILURE
+        assert result.details["machine"] == "test_machine"
+        assert result.message and "no compute nic found" in result.message
+
+    def test_run_with_compute_and_network_both_need_nic(self):
+        """Both compute and network nodes require the same NIC tag."""
+        for role in [RoleTags.COMPUTE.value, RoleTags.NETWORK.value]:
+            machine = {
+                "hostname": f"test_machine_{role}",
+                "roles": [role],
+                "nics": [{"name": "eth1", "tags": [NicTags.COMPUTE.value]}],
+            }
+            check = MachineComputeNicCheck(machine)
+            result = check.run()
+            assert result.passed is DiagnosticResultType.SUCCESS
+            assert result.message and NicTags.COMPUTE.value in result.message

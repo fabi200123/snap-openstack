@@ -39,6 +39,7 @@ class RoleTags(enum.Enum):
     CONTROL = "control"
     COMPUTE = "compute"
     STORAGE = "storage"
+    NETWORK = "network"
     JUJU_CONTROLLER = "juju-controller"
     SUNBEAM = "sunbeam"
 
@@ -67,6 +68,13 @@ ROLE_NETWORK_MAPPING = {
         Networks.MANAGEMENT,
         Networks.STORAGE,
         Networks.STORAGE_CLUSTER,
+    ],
+    RoleTags.NETWORK: [
+        Networks.INTERNAL,
+        Networks.MANAGEMENT,
+        Networks.PUBLIC,
+        Networks.DATA,
+        Networks.STORAGE,
     ],
     RoleTags.JUJU_CONTROLLER: [
         Networks.MANAGEMENT,
