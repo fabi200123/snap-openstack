@@ -90,6 +90,34 @@ class DeployMicroOVNApplicationStep(DeployMachineApplicationStep):
         if machine_ids:
             extra_tfvars["microovn_machine_ids"] = list(machine_ids)
             extra_tfvars["token_distributor_machine_ids"] = list(machine_ids)
+
+        # Bind MicroOVN endpoints only for MAAS deployments to avoid impacting local/manual
+        try:
+            if getattr(self.deployment, "type", "") == "maas":
+                from sunbeam.core.deployment import Networks
+
+                extra_tfvars.update(
+                    {
+                        "endpoint_bindings": [
+                            {"space": self.deployment.get_space(Networks.MANAGEMENT)},
+                            {
+                                "endpoint": "cluster",
+                                "space": self.deployment.get_space(Networks.MANAGEMENT),
+                            },
+                            {
+                                "endpoint": "certificates",
+                                "space": self.deployment.get_space(Networks.INTERNAL),
+                            },
+                            {
+                                "endpoint": "ovsdb-external",
+                                "space": self.deployment.get_space(Networks.INTERNAL),
+                            },
+                        ]
+                    }
+                )
+        except Exception:
+            # If provider does not support space mapping or any lookup fails, skip bindings
+            pass
         return extra_tfvars
 
 

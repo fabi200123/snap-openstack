@@ -22,6 +22,7 @@ from sunbeam.commands.configure import (
     DemoSetup,
     TerraformDemoInitStep,
     UserOpenRCStep,
+    get_external_network_configs,
     retrieve_admin_credentials,
 )
 from sunbeam.commands.dashboard_url import retrieve_dashboard_url
@@ -159,6 +160,11 @@ from sunbeam.steps.k8s import (
     RemoveK8SUnitsStep,
     StoreK8SKubeConfigStep,
     UpdateK8SCloudStep,
+)
+from sunbeam.steps.microovn import (
+    DeployMicroOVNApplicationStep,
+    ReapplyMicroOVNOptionalIntegrationsStep,
+    RemoveMicroOVNUnitsStep,
 )
 from sunbeam.steps.microceph import (
     CheckMicrocephDistributionStep,
@@ -583,6 +589,7 @@ def deploy(
     tfhelper_cinder_volume = deployment.get_tfhelper("cinder-volume-plan")
     tfhelper_openstack_deploy = deployment.get_tfhelper("openstack-plan")
     tfhelper_hypervisor_deploy = deployment.get_tfhelper("hypervisor-plan")
+    tfhelper_microovn = deployment.get_tfhelper("microovn-plan")
 
     plan: list[BaseStep] = []
     plan.append(AddManifestStep(client, manifest_path))
@@ -760,6 +767,32 @@ def deploy(
             manifest,
         )
     )
+    # Deploy MicroOVN and subordinate openstack-network-agents only if network nodes exist
+    network_nodes = list(
+        map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.NETWORK.value))
+    )
+    if len(network_nodes) > 0:
+        plan2.append(TerraformInitStep(tfhelper_microovn))
+        plan2.append(
+            DeployMicroOVNApplicationStep(
+                deployment,
+                client,
+                tfhelper_microovn,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+            )
+        )
+        plan2.append(
+            ReapplyMicroOVNOptionalIntegrationsStep(
+                deployment,
+                client,
+                tfhelper_microovn,
+                jhelper,
+                manifest,
+                deployment.openstack_machines_model,
+            )
+        )
     plan2.append(
         OpenStackPatchLoadBalancerServicesIPPoolStep(
             client, deployment.public_api_label
@@ -903,6 +936,9 @@ def configure_cmd(
     compute = list(
         map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.COMPUTE.value))
     )
+    network = list(
+        map(_name_mapper, client.cluster.list_nodes_by_role(RoleTags.NETWORK.value))
+    )
     plan = [
         AddManifestStep(client, manifest_path),
         JujuLoginStep(deployment.juju_account),
@@ -942,12 +978,15 @@ def configure_cmd(
             deployment.openstack_machines_model,
             manifest,
         ),
+        # Configure network agents on network nodes using MAAS NIC tags
         MaasConfigureOpenstackNetworkAgentsStep(
             client,
             maas_client,
+            network,
             jhelper,
             deployment.openstack_machines_model,
-            manifest,
+            bridge_name=get_external_network_configs(client).get("external-bridge", "br-ex"),
+            physnet_name=get_external_network_configs(client).get("physnet-name", "physnet1"),
         ),
     ]
 

@@ -407,8 +407,11 @@ class MachineComputeNicCheck(DiagnosticsCheck):
                 machine=self.machine["hostname"],
             )
         compute_tag = maas_deployment.NicTags.COMPUTE.value
-        if maas_deployment.RoleTags.COMPUTE.value not in assigned_roles:
-            self.message = "not a compute node."
+        if (
+            maas_deployment.RoleTags.COMPUTE.value not in assigned_roles
+            and maas_deployment.RoleTags.NETWORK.value not in assigned_roles
+        ):
+            self.message = "not a compute or network node."
             return DiagnosticsResult.success(
                 self.name,
                 self.message,
@@ -1346,6 +1349,7 @@ class MaasAddMachinesToClusterdStep(BaseStep):
                     maas_deployment.RoleTags.CONTROL.value,
                     maas_deployment.RoleTags.COMPUTE.value,
                     maas_deployment.RoleTags.STORAGE.value,
+                    maas_deployment.RoleTags.NETWORK.value,
                 }
             ):
                 filtered_machines.append(machine)
@@ -1944,16 +1948,18 @@ class MaasConfigureOpenstackNetworkAgentsStep(
         names: list[str],
         jhelper: JujuHelper,
         model: str,
-        manifest: Manifest | None = None,
+        bridge_name: str,
+        physnet_name: str,
+        enable_chassis_as_gw: bool = True,
     ):
         super().__init__(
-            client,
-            names,
-            jhelper,
-            model,
-            manifest,
-            "Configure OpenStack network agents",
-            "Configuring OpenStack network agents",
+            client=client,
+            names=names,
+            jhelper=jhelper,
+            bridge_name=bridge_name,
+            physnet_name=physnet_name,
+            model=model,
+            enable_chassis_as_gw=enable_chassis_as_gw,
         )
         self.maas_client = maas_client
 
@@ -1999,7 +2005,8 @@ class MaasConfigureOpenstackNetworkAgentsStep(
                     f"Machine {machine} does not have any {nic_tag} nic defined.",
                 )
 
-        self.nics = nics
+        # Use MAAS-provided NIC mapping as external interfaces
+        self.external_interfaces = nics
         return Result(ResultType.COMPLETED)
 
 class MaasUserQuestions(BaseStep):
