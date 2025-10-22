@@ -39,6 +39,9 @@ core:
           snap-channel: squid/stable
       microovn:
         channel: latest/edge
+      traefik-k8s:
+        channel: latest/stable
+        revision: 236
 features:
   caas:
     software:
