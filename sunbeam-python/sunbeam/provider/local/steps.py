@@ -187,6 +187,7 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
                 )
                 self.nics[host] = nic
                 return
+
             self.nics[host] = self.prompt_for_nic(console)
 
 

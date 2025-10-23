@@ -472,6 +472,24 @@ class UserQuestions(BaseStep):
         if self.manifest and (user := self.manifest.core.config.user):
             preseed = user.model_dump(by_alias=True)
 
+        # Check if there are any network nodes in the cluster
+        is_compute_node = False
+        is_bootstrap_node = False
+
+        try:
+            cluster_nodes = self.client.cluster.list_nodes()
+            is_bootstrap_node = len(cluster_nodes) == 1
+
+            # Check if current node has the compute role
+            fqdn = utils.get_fqdn()
+            node_info = self.client.cluster.get_node_info(fqdn)
+            roles = node_info.get("role", [])
+            if isinstance(roles, str):
+                roles = [roles]
+            is_compute_node = "compute" in [r.lower() for r in roles]
+        except Exception:
+            LOG.debug("Could not determine cluster node")
+
         user_bank = sunbeam.core.questions.QuestionBank(
             questions=user_questions(),
             console=console,
@@ -480,9 +498,18 @@ class UserQuestions(BaseStep):
             accept_defaults=self.accept_defaults,
             show_hint=show_hint,
         )
-        self.variables["user"]["remote_access_location"] = (
-            user_bank.remote_access_location.ask()
-        )
+
+        # Only ask local/remote question for bootstrap node with compute role
+        if is_bootstrap_node and is_compute_node:
+            # Ask for remote/local access since this is first node and a compute node
+            self.variables["user"]["remote_access_location"] = (
+                user_bank.remote_access_location.ask()
+            )
+            LOG.debug("Bootstrap node with compute role, asked for remote/local access")
+        else:
+            # All other cases: not single node, set to remote access
+            self.variables["user"]["remote_access_location"] = utils.REMOTE_ACCESS
+            LOG.debug("Not a bootstrap compute node, defaulting to remote access")
         # External Network Configuration
         preseed = {}
         if self.manifest and (
@@ -717,7 +744,7 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
         self.bridge_name = bridge_name
         self.physnet_name = physnet_name
         self.enable_chassis_as_gw = enable_chassis_as_gw
-        self.external_interfaces: dict[str, str] = {}
+        self.external_interfaces: dict[str, str | None] = {}
 
     def is_skip(self, status: Status | None = None) -> Result:
         """Check if openstack-network-agents is deployed."""
@@ -748,7 +775,7 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
                 )
 
                 external_iface = self.external_interfaces.get(name)
-                if not external_iface:
+                if external_iface is None or external_iface == "":
                     msg = f"No external interface specified for node {name}"
                     LOG.debug(msg)
                     return Result(ResultType.FAILED, msg)
