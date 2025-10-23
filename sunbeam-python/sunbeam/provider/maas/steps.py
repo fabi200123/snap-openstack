@@ -1966,7 +1966,7 @@ class MaasConfigureOpenstackNetworkAgentsStep(
         self.maas_client = maas_client
 
     def _get_maas_nics(self) -> dict[str, str | None]:
-        """Retrieve fist nic from MAAS per machine with network tag.
+        """Retrieve first nic from MAAS per machine with network tag.
 
         Return a dict of format:
             {

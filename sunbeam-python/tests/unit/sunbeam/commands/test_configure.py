@@ -112,11 +112,16 @@ class TestUserQuestions:
         self, cclient, load_answers, question_bank, jhelper, write_answers
     ):
         load_answers.return_value = {}
+        cclient.cluster.list_nodes.return_value = [{"name": "test-node"}]
+        cclient.cluster.get_node_info.return_value = {"role": ["compute", "control"]}
         user_bank_mock, net_bank_mock = self.configure_mocks(question_bank)
         user_bank_mock.remote_access_location.ask.return_value = "local"
         user_bank_mock.run_demo_setup.ask.return_value = True
         step = configure.UserQuestions(cclient, jhelper)
-        step.prompt()
+        with patch(
+            "sunbeam.commands.configure.utils.get_fqdn", return_value="test-node"
+        ):
+            step.prompt()
         self.check_demo_questions(user_bank_mock, net_bank_mock)
         self.check_not_remote_questions(net_bank_mock)
 
@@ -124,11 +129,16 @@ class TestUserQuestions:
         self, cclient, load_answers, question_bank, jhelper, write_answers
     ):
         load_answers.return_value = {}
+        cclient.cluster.list_nodes.return_value = [{"name": "test-node"}]
+        cclient.cluster.get_node_info.return_value = {"role": ["compute", "control"]}
         user_bank_mock, net_bank_mock = self.configure_mocks(question_bank)
         user_bank_mock.remote_access_location.ask.return_value = "local"
         user_bank_mock.run_demo_setup.ask.return_value = False
         step = configure.UserQuestions(cclient, jhelper)
-        step.prompt()
+        with patch(
+            "sunbeam.commands.configure.utils.get_fqdn", return_value="test-node"
+        ):
+            step.prompt()
         self.check_not_demo_questions(user_bank_mock, net_bank_mock)
         self.check_not_remote_questions(net_bank_mock)
 
