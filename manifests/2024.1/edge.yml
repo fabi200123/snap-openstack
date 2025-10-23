@@ -14,7 +14,8 @@ core:
       keystone-k8s:
         channel: 2024.1/edge
       neutron-k8s:
-        channel: 2024.1/edge
+        # channel: 2024.1/edge
+        revision: 161
       nova-k8s:
         channel: 2024.1/edge
       openstack-hypervisor:
