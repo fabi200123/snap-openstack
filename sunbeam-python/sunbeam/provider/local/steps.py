@@ -187,6 +187,28 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
                 )
                 self.nics[host] = nic
                 return
+
+            # Check if there are network nodes in the cluster
+            # If network nodes exist, skip external interface prompt for compute nodes
+            try:
+                network_nodes = self.client.cluster.list_nodes_by_role("network")
+                if network_nodes:
+                    LOG.info(
+                        "Network node(s) detected in cluster. "
+                        "Skipping external interface configuration for "
+                        "compute node %s.",
+                        host,
+                    )
+                    # Set to None to skip interface configuration
+                    self.nics[host] = None
+                    return
+            except Exception as e:
+                LOG.debug(
+                    "Failed to check for network nodes: %s. Proceeding with prompt.",
+                    e,
+                    exc_info=True,
+                )
+
             self.nics[host] = self.prompt_for_nic(console)
 
 

@@ -84,7 +84,6 @@ class TestDeployMicroOVNApplicationStep(unittest.TestCase):
         )
         extra_tfvars = step.extra_tfvars()
 
-        # Now includes endpoint_bindings as part of network node support
         assert "ca-offer-url" in extra_tfvars
         assert "ovn-relay-offer-url" in extra_tfvars
         assert "endpoint_bindings" in extra_tfvars

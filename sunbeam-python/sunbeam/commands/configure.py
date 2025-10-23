@@ -472,6 +472,18 @@ class UserQuestions(BaseStep):
         if self.manifest and (user := self.manifest.core.config.user):
             preseed = user.model_dump(by_alias=True)
 
+        # Check if this node has the network role
+        is_network_node = False
+        try:
+            fqdn = utils.get_fqdn()
+            node_info = self.client.cluster.get_node_info(fqdn)
+            roles = node_info.get("role", [])
+            if isinstance(roles, str):
+                roles = [roles]
+            is_network_node = "network" in [r.lower() for r in roles]
+        except Exception:
+            LOG.debug("Could not determine node roles")
+
         user_bank = sunbeam.core.questions.QuestionBank(
             questions=user_questions(),
             console=console,
@@ -480,9 +492,14 @@ class UserQuestions(BaseStep):
             accept_defaults=self.accept_defaults,
             show_hint=show_hint,
         )
-        self.variables["user"]["remote_access_location"] = (
-            user_bank.remote_access_location.ask()
-        )
+
+        if is_network_node:
+            # Network nodes always use remote access, skip the question
+            self.variables["user"]["remote_access_location"] = utils.REMOTE_ACCESS
+        else:
+            self.variables["user"]["remote_access_location"] = (
+                user_bank.remote_access_location.ask()
+            )
         # External Network Configuration
         preseed = {}
         if self.manifest and (
@@ -717,7 +734,7 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
         self.bridge_name = bridge_name
         self.physnet_name = physnet_name
         self.enable_chassis_as_gw = enable_chassis_as_gw
-        self.external_interfaces: dict[str, str] = {}
+        self.external_interfaces: dict[str, str | None] = {}
 
     def is_skip(self, status: Status | None = None) -> Result:
         """Check if openstack-network-agents is deployed."""
@@ -748,7 +765,7 @@ class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper)
                 )
 
                 external_iface = self.external_interfaces.get(name)
-                if not external_iface:
+                if external_iface is None or external_iface == "":
                     msg = f"No external interface specified for node {name}"
                     LOG.debug(msg)
                     return Result(ResultType.FAILED, msg)
