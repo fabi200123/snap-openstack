@@ -190,6 +190,7 @@ class CoreConfig(pydantic.BaseModel):
         cidr: str | None = None
         nameservers: str | None = None
         security_group_rules: bool | None = None
+        plan_to_add_network_nodes: bool | None = None
         remote_access_location: typing.Literal["local", "remote"] | None = None
 
     class _ExternalNetwork(pydantic.BaseModel):
