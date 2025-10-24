@@ -164,6 +164,9 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
         remote_access_location = self.variables.get("user", {}).get(
             "remote_access_location"
         )
+        plan_to_add_network_nodes = self.variables.get("user", {}).get(
+            "plan_to_add_network_nodes", False
+        )
         # If adding new nodes to the cluster then local access makes no sense
         # so always prompt for the nic.
         preseed = {}
@@ -208,6 +211,19 @@ class LocalSetHypervisorUnitsOptionsStep(SetHypervisorUnitsOptionsStep):
                     e,
                     exc_info=True,
                 )
+
+            # Check if user plans to add network nodes
+            # If yes, skip external interface prompt for compute nodes
+            if plan_to_add_network_nodes:
+                LOG.info(
+                    "Network nodes are planned for the cluster. "
+                    "Skipping external interface configuration for "
+                    "compute node %s.",
+                    host,
+                )
+                # Set to None to skip interface configuration
+                self.nics[host] = None
+                return
 
             self.nics[host] = self.prompt_for_nic(console)
 
