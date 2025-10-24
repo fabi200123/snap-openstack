@@ -97,6 +97,16 @@ def user_questions():
                 " rules to allow ICMP and SSH access to instances."
             ),
         ),
+        "plan_to_add_network_nodes": sunbeam.core.questions.ConfirmQuestion(
+            "Do you plan to add dedicated network nodes to the cluster?",
+            default_value=False,
+            description=(
+                "Network nodes handle North/South traffic for the cluster."
+                " If you plan to add network nodes, access mode will be"
+                " automatically configured: compute nodes use local access,"
+                " and network nodes use remote access."
+            ),
+        ),
         "remote_access_location": sunbeam.core.questions.PromptQuestion(
             "Local or remote access to VMs",
             choices=[utils.LOCAL_ACCESS, utils.REMOTE_ACCESS],
@@ -472,9 +482,14 @@ class UserQuestions(BaseStep):
         if self.manifest and (user := self.manifest.core.config.user):
             preseed = user.model_dump(by_alias=True)
 
-        # Check if this node has the network role
+        # Check if there are any network nodes in the cluster
+        has_network_nodes = False
         is_network_node = False
         try:
+            network_nodes = self.client.cluster.list_nodes_by_role("network")
+            has_network_nodes = len(network_nodes) > 0
+
+            # Check if current node has the network role
             fqdn = utils.get_fqdn()
             node_info = self.client.cluster.get_node_info(fqdn)
             roles = node_info.get("role", [])
@@ -482,7 +497,7 @@ class UserQuestions(BaseStep):
                 roles = [roles]
             is_network_node = "network" in [r.lower() for r in roles]
         except Exception:
-            LOG.debug("Could not determine node roles")
+            LOG.debug("Could not determine cluster network nodes")
 
         user_bank = sunbeam.core.questions.QuestionBank(
             questions=user_questions(),
@@ -493,13 +508,39 @@ class UserQuestions(BaseStep):
             show_hint=show_hint,
         )
 
-        if is_network_node:
-            # Network nodes always use remote access, skip the question
-            self.variables["user"]["remote_access_location"] = utils.REMOTE_ACCESS
+        if has_network_nodes or is_network_node:
+            # Network nodes exist in cluster or current node is a network node
+            if is_network_node:
+                # Network nodes always use remote access
+                self.variables["user"]["remote_access_location"] = utils.REMOTE_ACCESS
+                LOG.debug("Current node is a network node, setting remote access")
+            else:
+                # Compute nodes use local access when network nodes exist
+                self.variables["user"]["remote_access_location"] = utils.LOCAL_ACCESS
+                LOG.debug(
+                    "Network nodes exist in cluster, "
+                    "setting local access for compute node"
+                )
         else:
-            self.variables["user"]["remote_access_location"] = (
-                user_bank.remote_access_location.ask()
+            # No network nodes in cluster yet
+            # Ask if user plans to add network nodes
+            plan_to_add_network_nodes = user_bank.plan_to_add_network_nodes.ask()
+            self.variables["user"]["plan_to_add_network_nodes"] = (
+                plan_to_add_network_nodes
             )
+
+            if plan_to_add_network_nodes:
+                # User plans to add network nodes, set local access for compute nodes
+                self.variables["user"]["remote_access_location"] = utils.LOCAL_ACCESS
+                LOG.debug(
+                    "User plans to add network nodes, "
+                    "setting local access for compute node"
+                )
+            else:
+                # No network nodes planned, ask for remote/local access
+                self.variables["user"]["remote_access_location"] = (
+                    user_bank.remote_access_location.ask()
+                )
         # External Network Configuration
         preseed = {}
         if self.manifest and (
