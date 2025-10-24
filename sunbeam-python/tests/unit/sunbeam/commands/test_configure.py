@@ -88,7 +88,11 @@ class TestUserQuestions:
         self, cclient, load_answers, question_bank, jhelper, write_answers
     ):
         load_answers.return_value = {}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
+        cclient.cluster.get_node_info.return_value = {"role": ["compute", "control"]}
         user_bank_mock, net_bank_mock = self.configure_mocks(question_bank)
+        user_bank_mock.plan_to_add_network_nodes.ask.return_value = False
         user_bank_mock.remote_access_location.ask.return_value = "remote"
         user_bank_mock.run_demo_setup.ask.return_value = True
         step = configure.UserQuestions(cclient, jhelper)
@@ -100,7 +104,11 @@ class TestUserQuestions:
         self, cclient, load_answers, question_bank, jhelper, write_answers
     ):
         load_answers.return_value = {}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
+        cclient.cluster.get_node_info.return_value = {"role": ["compute", "control"]}
         user_bank_mock, net_bank_mock = self.configure_mocks(question_bank)
+        user_bank_mock.plan_to_add_network_nodes.ask.return_value = False
         user_bank_mock.remote_access_location.ask.return_value = "remote"
         user_bank_mock.run_demo_setup.ask.return_value = False
         step = configure.UserQuestions(cclient, jhelper)
@@ -112,7 +120,11 @@ class TestUserQuestions:
         self, cclient, load_answers, question_bank, jhelper, write_answers
     ):
         load_answers.return_value = {}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
+        cclient.cluster.get_node_info.return_value = {"role": ["compute", "control"]}
         user_bank_mock, net_bank_mock = self.configure_mocks(question_bank)
+        user_bank_mock.plan_to_add_network_nodes.ask.return_value = False
         user_bank_mock.remote_access_location.ask.return_value = "local"
         user_bank_mock.run_demo_setup.ask.return_value = True
         step = configure.UserQuestions(cclient, jhelper)
@@ -124,7 +136,11 @@ class TestUserQuestions:
         self, cclient, load_answers, question_bank, jhelper, write_answers
     ):
         load_answers.return_value = {}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
+        cclient.cluster.get_node_info.return_value = {"role": ["compute", "control"]}
         user_bank_mock, net_bank_mock = self.configure_mocks(question_bank)
+        user_bank_mock.plan_to_add_network_nodes.ask.return_value = False
         user_bank_mock.remote_access_location.ask.return_value = "local"
         user_bank_mock.run_demo_setup.ask.return_value = False
         step = configure.UserQuestions(cclient, jhelper)
