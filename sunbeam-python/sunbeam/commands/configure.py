@@ -18,6 +18,7 @@ from sunbeam.core.common import BaseStep, Result, ResultType, Status, validate_i
 from sunbeam.core.juju import (
     ActionFailedException,
     JujuHelper,
+    JujuStepHelper,
     LeaderNotFoundException,
 )
 from sunbeam.core.manifest import Manifest
@@ -30,6 +31,8 @@ from sunbeam.core.terraform import (
 CLOUD_CONFIG_SECTION = "CloudConfig"
 PCI_CONFIG_SECTION = "PCI"
 DPDK_CONFIG_SECTION = "DPDK"
+MICROOVN_APPLICATION = "microovn"
+OPENSTACK_NETWORK_AGENTS_APP = "openstack-network-agents"
 
 LOG = logging.getLogger(__name__)
 console = Console()
@@ -469,6 +472,24 @@ class UserQuestions(BaseStep):
         if self.manifest and (user := self.manifest.core.config.user):
             preseed = user.model_dump(by_alias=True)
 
+        # Check if there is a single compute node in the cluster
+        is_compute_node = False
+        is_bootstrap_node = False
+
+        try:
+            cluster_nodes = self.client.cluster.list_nodes()
+            is_bootstrap_node = len(cluster_nodes) == 1
+
+            # Check if current node has the compute role
+            fqdn = utils.get_fqdn()
+            node_info = self.client.cluster.get_node_info(fqdn)
+            roles = node_info.get("role", [])
+            if isinstance(roles, str):
+                roles = [roles]
+            is_compute_node = "compute" in [r.lower() for r in roles]
+        except Exception:
+            LOG.debug("Could not determine cluster node")
+
         user_bank = sunbeam.core.questions.QuestionBank(
             questions=user_questions(),
             console=console,
@@ -477,9 +498,18 @@ class UserQuestions(BaseStep):
             accept_defaults=self.accept_defaults,
             show_hint=show_hint,
         )
-        self.variables["user"]["remote_access_location"] = (
-            user_bank.remote_access_location.ask()
-        )
+
+        # Only ask local/remote question for bootstrap node with compute role
+        if is_bootstrap_node and is_compute_node:
+            # Ask for remote/local access since this is first node and a compute node
+            self.variables["user"]["remote_access_location"] = (
+                user_bank.remote_access_location.ask()
+            )
+            LOG.debug("Bootstrap node with compute role, asked for remote/local access")
+        else:
+            # All other cases: not single node, set to remote access
+            self.variables["user"]["remote_access_location"] = utils.REMOTE_ACCESS
+            LOG.debug("Not a bootstrap compute node, defaulting to remote access")
         # External Network Configuration
         preseed = {}
         if self.manifest and (
@@ -682,6 +712,134 @@ class SetHypervisorUnitsOptionsStep(BaseStep):
                 LOG.debug(_message, exc_info=True)
                 return Result(ResultType.FAILED, _message)
         return Result(ResultType.COMPLETED)
+
+
+class ConfigureOpenStackNetworkAgentsLocalSettingsStep(BaseStep, JujuStepHelper):
+    """Configure openstack-network-agents local settings via charm config.
+
+    This is intended to run after microovn optional integrations are applied,
+    so juju-info relation to openstack-network-agents exists.
+    """
+
+    def __init__(
+        self,
+        client: Client,
+        names: list[str] | str,
+        jhelper: JujuHelper,
+        bridge_name: str,
+        physnet_name: str,
+        model: str,
+        enable_chassis_as_gw: bool = True,
+    ):
+        super().__init__(
+            "Configure OpenStack network agents",
+            "Setting openstack-network-agents local settings",
+        )
+        self.client = client
+        if isinstance(names, str):
+            names = [names]
+        self.names = names
+        self.jhelper = jhelper
+        self.model = model
+        self.bridge_name = bridge_name
+        self.physnet_name = physnet_name
+        self.enable_chassis_as_gw = enable_chassis_as_gw
+        self.external_interfaces: dict[str, str | None] = {}
+
+    def is_skip(self, status: Status | None = None) -> Result:
+        """Check if openstack-network-agents is deployed."""
+        try:
+            self.jhelper.get_application(OPENSTACK_NETWORK_AGENTS_APP, self.model)
+        except Exception:
+            return Result(ResultType.SKIPPED, "openstack-network-agents not deployed")
+        return Result(ResultType.COMPLETED)
+
+    def run(self, status: Status | None = None) -> Result:
+        """Run action to configure openstack-network-agents local settings.
+
+        For each node name, identify the principal microovn unit on that
+        machine and run the action on its openstack-network-agents subordinate.
+        """
+        try:
+            self.jhelper.wait_application_ready(
+                OPENSTACK_NETWORK_AGENTS_APP,
+                self.model,
+                accepted_status=["active", "blocked", "waiting"],
+                timeout=600,
+            )
+
+            for name in self.names:
+                self.update_status(
+                    status,
+                    f"setting openstack-network-agents local settings for {name}",
+                )
+
+                external_iface = self.external_interfaces.get(name)
+                if external_iface is None or external_iface == "":
+                    msg = f"No external interface specified for node {name}"
+                    LOG.debug(msg)
+                    return Result(ResultType.FAILED, msg)
+
+                node = self.client.cluster.get_node_info(name)
+                machine_id = str(node.get("machineid"))
+
+                # Principal unit on this machine
+                principal = self.jhelper.get_unit_from_machine(
+                    MICROOVN_APPLICATION, machine_id, self.model
+                )
+
+                try:
+                    unit_name = self.find_subordinate_unit_for(
+                        principal, OPENSTACK_NETWORK_AGENTS_APP, self.model
+                    )
+                except Exception as e:
+                    LOG.debug(
+                        "Failed to find subordinate unit for %s on principal %s: %s",
+                        OPENSTACK_NETWORK_AGENTS_APP,
+                        principal,
+                        e,
+                        exc_info=True,
+                    )
+                    return Result(
+                        ResultType.FAILED,
+                        f"Could not find {
+                            OPENSTACK_NETWORK_AGENTS_APP
+                        } unit for principal {principal}",
+                    )
+
+                LOG.debug(
+                    "Running set-network-agents-local-settings on %s"
+                    " (bridge=%s, physnet=%s, iface=%s, gw=%s)",
+                    unit_name,
+                    self.bridge_name,
+                    self.physnet_name,
+                    external_iface,
+                    self.enable_chassis_as_gw,
+                )
+
+                self.jhelper.run_action(
+                    unit_name,
+                    self.model,
+                    "set-network-agents-local-settings",
+                    action_params={
+                        "external-interface": external_iface,
+                        "bridge-name": self.bridge_name,
+                        "physnet-name": self.physnet_name,
+                        "enable-chassis-as-gw": self.enable_chassis_as_gw,
+                    },
+                )
+
+            return Result(ResultType.COMPLETED)
+
+        except Exception as e:
+            LOG.debug(
+                "Failed to configure openstack-network-agents via action: %s",
+                e,
+                exc_info=True,
+            )
+            return Result(
+                ResultType.FAILED, "Failed to configure openstack-network-agents"
+            )
 
 
 class BaseConfigDPDKStep(BaseStep):

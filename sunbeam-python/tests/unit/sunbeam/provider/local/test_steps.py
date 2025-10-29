@@ -85,6 +85,8 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         fetch_nics,
     ):
         load_answers.return_value = {"user": {"remote_access_location": "remote"}}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
         local_hypervisor_bank_mock.nics.ask.return_value = "eth2"
@@ -110,6 +112,8 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         fetch_nics,
     ):
         load_answers.return_value = {"user": {"remote_access_location": "remote"}}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
         local_hypervisor_bank_mock.nics.ask.return_value = "eth2"
@@ -146,6 +150,8 @@ class TestLocalSetHypervisorUnitsOptionsStep:
         fetch_nics,
     ):
         load_answers.return_value = {"user": {"remote_access_location": "local"}}
+        # Mock no network nodes in cluster
+        cclient.cluster.list_nodes_by_role.return_value = []
         local_hypervisor_bank_mock = Mock()
         question_bank.return_value = local_hypervisor_bank_mock
         local_hypervisor_bank_mock.nics.ask.return_value = "eth2"
